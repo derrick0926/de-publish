@@ -8,7 +8,7 @@
   {"id", "code", "line", "title", "vocus_url",
    "fb": {"message", "images": ["fb-01.jpg", …], "comment"},
    "ig": {"caption", "images": ["ig-01.jpg", …]},
-   "threads": {"text"}}
+   "threads": {"text", "reply"}}   # reply（2026-11-27 起）：第一則回覆，放 CTA 與 vocus 連結；沒有就不發回覆
 
 不重發：每個平台發完立刻寫 state/<id>.json 並 push；重跑時已發的平台跳過（例：FB 已發、IG 失敗，重跑只補 IG）。
 圖片順序：FB 照 fb.images、IG 照 ig.images 的順序上傳與組輪播（貼文包產生時已依圖卡編號排好並檢查過）。
@@ -22,8 +22,8 @@ import time
 
 import common as c
 
-PLATFORMS = ("fb_post", "fb_comment", "ig", "threads")
-LABEL = {"fb_post": "FB 貼文", "fb_comment": "FB 留言", "ig": "IG", "threads": "Threads"}
+PLATFORMS = ("fb_post", "fb_comment", "ig", "threads", "threads_reply")
+LABEL = {"fb_post": "FB 貼文", "fb_comment": "FB 留言", "ig": "IG", "threads": "Threads", "threads_reply": "Threads 回覆"}
 
 
 # ---------- 文字 ----------
@@ -134,14 +134,26 @@ def ig_post(post, files, todo_id) -> str:
     return c.meta("POST", f"{c.GRAPH}/{ig}/media_publish", data={"creation_id": cid, "access_token": tok})["id"]
 
 
-def threads_post(post) -> str:
+def threads_text(text: str, reply_to: str = "") -> str:
+    """發一則 Threads 純文字；reply_to 有值就發成那則的回覆。"""
     uid, tok = c.env("THREADS_USER_ID"), c.env("THREADS_TOKEN")
-    text = keep_blank_lines(post["threads"]["text"])
+    text = keep_blank_lines(text)
     if len(text) > 500:
         raise c.ApiError(f"Threads 超過 500 字（{len(text)}）")
-    cid = c.meta("POST", f"{c.THREADS}/{uid}/threads", data={"media_type": "TEXT", "text": text, "access_token": tok})["id"]
+    data = {"media_type": "TEXT", "text": text, "access_token": tok}
+    if reply_to:
+        data["reply_to_id"] = reply_to
+    cid = c.meta("POST", f"{c.THREADS}/{uid}/threads", data=data)["id"]
     wait_ready(c.THREADS, cid, tok, "status", "FINISHED", limit=120)
     return c.meta("POST", f"{c.THREADS}/{uid}/threads_publish", data={"creation_id": cid, "access_token": tok})["id"]
+
+
+def threads_post(post) -> str:
+    return threads_text(post["threads"]["text"])
+
+
+def threads_reply(post, parent_id: str) -> str:
+    return threads_text(post["threads"]["reply"], reply_to=parent_id)
 
 
 def permalink(kind: str, pid: str) -> str:
@@ -168,6 +180,8 @@ def needed(post) -> list[str]:
         out.append("ig")
     if post.get("threads"):
         out.append("threads")
+        if (post["threads"].get("reply") or "").strip():
+            out.append("threads_reply")
     return out
 
 
@@ -218,6 +232,10 @@ def publish_one(item: dict, force: bool) -> str:
                     pid = ig_post(post, files, tid)
                 finally:
                     unstage_images(tid)
+            elif k == "threads_reply":
+                if not st["done"].get("threads"):
+                    raise c.ApiError("Threads 主文沒發成功，回覆跳過")
+                pid = threads_reply(post, st["done"]["threads"])
             else:
                 pid = threads_post(post)
             st["done"][k] = pid

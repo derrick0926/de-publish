@@ -22,7 +22,7 @@ publish.time.sleep = lambda *_: None
 POST = {"id": "abc123", "title": "測試貼文", "vocus_url": "https://vocus.cc/article/x",
         "fb": {"message": "第一段\n\n第二段\n", "images": ["fb-01.jpg", "fb-02.jpg"], "comment": "全文 https://vocus.cc/article/x"},
         "ig": {"caption": "IG 內文", "images": ["ig-01.jpg", "ig-02.jpg"]},
-        "threads": {"text": "Threads 內文 https://vocus.cc/article/x"}}
+        "threads": {"text": "Threads 內文", "reply": "完整拆解在這：https://vocus.cc/article/x"}}
 JPG = b"\xff\xd8\xff\xe0fake"
 
 
@@ -80,6 +80,9 @@ class Fake:
         if u.endswith("/IG/media_publish"):
             return 200, {"id": "igm1"}
         if u.endswith("/T/threads"):
+            if body.get("reply_to_id"):
+                assert body["reply_to_id"] == "th1", "回覆要掛在主文底下"
+                self.threads_reply = body["text"]
             return 200, {"id": "tc1"}
         if u.endswith("/T/threads_publish"):
             return 200, {"id": "th1"}
@@ -117,7 +120,7 @@ def test_success_and_no_repost():
     f = Fake(); c.http = f
     assert publish.main([]) == 0
     st = json.loads((c.STATE / "abc123.json").read_text())
-    assert st["result"] == "done" and set(st["done"]) == {"fb_post", "fb_comment", "ig", "threads"}, st
+    assert st["result"] == "done" and set(st["done"]) == {"fb_post", "fb_comment", "ig", "threads", "threads_reply"}, st
     assert f.events[-1]["type"] == "publish_done" and f.events[-1]["links"]["ig"] == "https://link/x"
     assert f.uploaded == ["fb-01.jpg", "fb-02.jpg"] and [n for _, n in f.children] == ["ig-01.jpg", "ig-02.jpg"], "圖片照貼文包順序"
     assert json.loads(c.SCHEDULE.read_text())["items"] == []

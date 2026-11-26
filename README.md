@@ -12,7 +12,7 @@ DE 行銷解碼的排程發文（FB、IG、Threads）。這是公開 repo：Acti
 | `state/<todo id>.json` | 每則的發佈結果：各平台貼文 id、連結、錯誤。重跑時已發的平台跳過。 |
 | `tmp/<todo id>/` | IG 圖暫放處，發完就刪。 |
 | `.github/workflows/alarm.yml` | 鬧鐘：睡到最早一則，時間到啟動 publish.yml；每段最多 5 小時 45 分，接力叫醒下一段。 |
-| `.github/workflows/publish.yml` | 發佈：FB 多圖 → 粉專留言 vocus 連結 → IG 輪播 → Threads。 |
+| `.github/workflows/publish.yml` | 發佈：FB 多圖 → 粉專留言 vocus 連結 → IG 輪播 → Threads 主文 → Threads 第一則回覆（CTA＋vocus 連結，2026-11-27 起）。 |
 | `.github/workflows/patrol.yml` | 每小時巡檢：鬧鐘斷了就重設、到時間沒發的就補發。 |
 | `.github/workflows/threads-refresh.yml` | Threads 權杖每 10 天更新，寫回 Secret。 |
 | `.github/workflows/check-setup.yml` | 只讀設定檢查；每週一自動跑，有問題或粉專資料存取期限 21 天內到期時通知 PM。 |
