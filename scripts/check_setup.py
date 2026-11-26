@@ -17,6 +17,7 @@ NEED_SCOPES = {"pages_manage_posts", "pages_manage_engagement", "pages_read_enga
                "instagram_basic", "instagram_content_publish"}
 
 rows, failed = [], False
+soon = ""   # 粉專資料存取期限 21 天內到期時記下日期
 
 
 def report(ok, item, detail):
@@ -64,7 +65,11 @@ if S["META_APP_ID"] and S["META_APP_SECRET"] and S["META_PAGE_TOKEN"]:
                "永不" if d.get("expires_at", 0) == 0 else datetime.fromtimestamp(d["expires_at"], timezone.utc).strftime("%Y-%m-%d"))
         dax = d.get("data_access_expires_at")
         if dax:
-            report(True, "資料存取期限", datetime.fromtimestamp(dax, timezone.utc).strftime("%Y-%m-%d") + "（之前要重跑第三部分）")
+            day = datetime.fromtimestamp(dax, timezone.utc)
+            left = (day - datetime.now(timezone.utc)).days
+            if left <= 21:
+                soon = day.strftime("%Y-%m-%d")
+            report(left > 21 or None, "資料存取期限", day.strftime("%Y-%m-%d") + f"（剩 {left} 天；之前要重跑設定教學第三部分）")
         lack = NEED_SCOPES - set(d.get("scopes", []))
         report(not lack, "權限", "發文、留言、IG 發佈都在" if not lack else "缺少：" + "、".join(sorted(lack)))
         report(d.get("app_id") == S["META_APP_ID"], "App 編號對得上", "是" if d.get("app_id") == S["META_APP_ID"] else "權杖不是這個 App 發的")
@@ -131,4 +136,11 @@ if summary:
     with open(summary, "a", encoding="utf-8") as f:
         f.write("## 發文助手設定檢查（只讀，不發文）\n\n| | 項目 | 結果 |\n|---|---|---|\n" + "\n".join(rows) + "\n")
 print("\n結果：" + ("有項目要修正" if failed else "全部通過"))
+if os.environ.get("NOTIFY") and (failed or soon):   # 每週定時檢查：有問題才通知 PM
+    sys.path.insert(0, os.path.dirname(__file__))
+    import common
+    bad = [r.split("|")[2].strip() for r in rows if r.startswith("| ✗")]
+    text = ("設定檢查有問題：" + "、".join(bad) + "。" if bad else "") + \
+           (f"粉專權杖的資料存取期限 {soon} 快到了，請在那之前重跑設定教學第三部分。" if soon else "")
+    common.push_event("publish_warn", "setup-check", text)
 sys.exit(1 if failed else 0)

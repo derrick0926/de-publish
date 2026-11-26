@@ -1,0 +1,14 @@
+name: 離線測試
+on:
+  push:
+    paths: ["scripts/**", "tests/**"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tests/test_offline.py

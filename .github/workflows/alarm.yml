@@ -1,0 +1,20 @@
+# 鬧鐘：睡到排程表最早的一則，時間到啟動 publish.yml。說明見 scripts/alarm.py。
+# 同一時間只有一個鬧鐘：重新啟動時舊的會被取消（發文助手改排程後就重新啟動這個）。
+name: 鬧鐘
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: alarm
+  cancel-in-progress: true
+jobs:
+  alarm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - name: 等到下一則
+        env:
+          PUBLISH_GH_TOKEN: ${{ secrets.PUBLISH_GH_TOKEN }}
+        run: python3 scripts/alarm.py

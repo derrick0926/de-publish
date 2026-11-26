@@ -1,0 +1,22 @@
+# 每小時備援巡檢：鬧鐘斷了就重設、有到時間沒發的就補發（逾時規則照樣套用）。說明見 scripts/patrol.py。
+# 公開 repo 60 天沒有任何變動時 GitHub 會停用這個定時 workflow；發文助手每次確認排程時檢查並重新啟用。
+name: 每小時巡檢
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: patrol
+  cancel-in-progress: true
+jobs:
+  patrol:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: 巡檢
+        env:
+          PUBLISH_GH_TOKEN: ${{ secrets.PUBLISH_GH_TOKEN }}
+        run: python3 scripts/patrol.py

@@ -1,0 +1,20 @@
+# Threads 長效權杖（60 天）每 10 天更新一次，新權杖寫回 Secret THREADS_TOKEN。失敗會通知 PM。
+name: Threads 權杖更新
+on:
+  schedule:
+    - cron: "41 19 1,11,21 * *"   # 台北時間 2、12、22 日 03:41
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install --quiet pynacl==1.5.0
+      - name: 更新權杖
+        env:
+          THREADS_TOKEN: ${{ secrets.THREADS_TOKEN }}
+          PUBLISH_GH_TOKEN: ${{ secrets.PUBLISH_GH_TOKEN }}
+        run: python3 scripts/refresh_threads.py

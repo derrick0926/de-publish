@@ -1,6 +1,8 @@
 name: 設定檢查（只讀）
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "7 1 * * 1"   # 每週一 09:07（台北）；有問題才通知 PM
   push:
     paths:
       - scripts/check_setup.py
@@ -26,4 +28,5 @@ jobs:
           THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
           THREADS_TOKEN: ${{ secrets.THREADS_TOKEN }}
           PUBLISH_GH_TOKEN: ${{ secrets.PUBLISH_GH_TOKEN }}
+          NOTIFY: ${{ github.event_name == 'schedule' && '1' || '' }}
         run: python scripts/check_setup.py

@@ -1,0 +1,36 @@
+# 發佈：FB 多圖＋粉專留言 vocus 連結 → IG 輪播 → Threads。說明見 scripts/publish.py。
+# 不會被取消（另一組 concurrency）；每個平台發完立刻記錄，重跑不會重發。
+name: 發佈
+on:
+  workflow_dispatch:
+    inputs:
+      ids:
+        description: "只發這幾則（todo id，逗號分隔）；留空＝所有到時間的"
+        required: false
+        default: ""
+      force:
+        description: "重試用：不套用 60 分鐘逾時規則"
+        type: boolean
+        default: false
+permissions:
+  contents: write
+concurrency:
+  group: publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: 發佈
+        env:
+          META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
+          META_PAGE_TOKEN: ${{ secrets.META_PAGE_TOKEN }}
+          META_IG_USER_ID: ${{ secrets.META_IG_USER_ID }}
+          THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
+          THREADS_TOKEN: ${{ secrets.THREADS_TOKEN }}
+          PUBLISH_GH_TOKEN: ${{ secrets.PUBLISH_GH_TOKEN }}
+          IDS: ${{ inputs.ids }}
+          FORCE: ${{ inputs.force }}
+        run: python3 scripts/publish.py --ids "$IDS" $([ "$FORCE" = "true" ] && echo --force)
