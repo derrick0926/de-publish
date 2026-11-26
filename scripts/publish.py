@@ -9,6 +9,10 @@
    "fb": {"message", "images": ["fb-01.jpg", …], "comment"},
    "ig": {"caption", "images": ["ig-01.jpg", …]},
    "threads": {"text", "reply"}}   # reply（2026-11-27 起）：第一則回覆，放 CTA 與 vocus 連結；沒有就不發回覆
+速報（2026-11-27 起，kind=flash／digest）：
+  {"id", "kind", "code", "title", "platforms": ["threads", …],
+   "threads": {"posts": ["主文", "回覆 1", "回覆 2", …]},   # 第一則主文，其餘依序串成回覆（每則掛在前一則底下）
+   "fb": {"message", "images": [], "comment"}}              # 圖空的就發純文字貼文；沒列在 platforms 的平台不發
 
 不重發：每個平台發完立刻寫 state/<id>.json 並 push；重跑時已發的平台跳過（例：FB 已發、IG 失敗，重跑只補 IG）。
 圖片順序：FB 照 fb.images、IG 照 ig.images 的順序上傳與組輪播（貼文包產生時已依圖卡編號排好並檢查過）。
@@ -23,7 +27,32 @@ import time
 import common as c
 
 PLATFORMS = ("fb_post", "fb_comment", "ig", "threads", "threads_reply")
-LABEL = {"fb_post": "FB 貼文", "fb_comment": "FB 留言", "ig": "IG", "threads": "Threads", "threads_reply": "Threads 回覆"}
+_LABEL = {"fb_post": "FB 貼文", "fb_comment": "FB 留言", "ig": "IG", "threads": "Threads", "threads_reply": "Threads 回覆"}
+
+
+class _Label(dict):
+    """threads_reply2、threads_reply3… 是速報串文的第 2、3 則回覆。"""
+    def __missing__(self, k):
+        return f"Threads 回覆 {k[len('threads_reply'):]}" if k.startswith("threads_reply") else k
+
+
+LABEL = _Label(_LABEL)
+
+
+def reply_key(n: int) -> str:
+    """第 n 則回覆（1 起算）的狀態鍵：第 1 則沿用 threads_reply，之後 threads_reply2…"""
+    return "threads_reply" if n == 1 else f"threads_reply{n}"
+
+
+def threads_posts(post) -> list[str]:
+    """把 threads 欄位整理成 [主文, 回覆 1, 回覆 2, …]；舊格式 {text, reply} 與速報格式 {posts} 都接受。"""
+    t = post.get("threads") or {}
+    if t.get("posts"):
+        return [x for x in t["posts"] if (x or "").strip()]
+    out = [t.get("text", "")]
+    if (t.get("reply") or "").strip():
+        out.append(t["reply"])
+    return out
 
 
 # ---------- 文字 ----------
@@ -61,12 +90,12 @@ def fetch_package(todo_id: str) -> tuple[dict, dict[str, bytes]]:
 def fb_post(post, files) -> str:
     page, tok = c.env("META_PAGE_ID"), c.env("META_PAGE_TOKEN")
     ids = []
-    for n in post["fb"]["images"]:
+    for n in post["fb"].get("images") or []:
         r = c.meta("POST", f"{c.GRAPH}/{page}/photos", data={"published": "false", "access_token": tok},
                    files={"source": (n, files[n], "image/jpeg")})
         ids.append(r["id"])
     data = {"message": keep_blank_lines(post["fb"]["message"]), "access_token": tok}
-    for k, i in enumerate(ids):
+    for k, i in enumerate(ids):   # 沒圖（速報）就只有文字
         data[f"attached_media[{k}]"] = '{"media_fbid":"%s"}' % i
     return c.meta("POST", f"{c.GRAPH}/{page}/feed", data=data)["id"]
 
@@ -149,11 +178,11 @@ def threads_text(text: str, reply_to: str = "") -> str:
 
 
 def threads_post(post) -> str:
-    return threads_text(post["threads"]["text"])
+    return threads_text(threads_posts(post)[0])
 
 
-def threads_reply(post, parent_id: str) -> str:
-    return threads_text(post["threads"]["reply"], reply_to=parent_id)
+def threads_reply(post, parent_id: str, n: int = 1) -> str:
+    return threads_text(threads_posts(post)[n], reply_to=parent_id)
 
 
 def permalink(kind: str, pid: str) -> str:
@@ -171,17 +200,19 @@ def permalink(kind: str, pid: str) -> str:
 
 # ---------- 一則 ----------
 def needed(post) -> list[str]:
+    plats = post.get("platforms")   # 速報會指定平台；沒有這欄（一般素材）就看有哪些內容
+    def on(p):
+        return post.get(p) and (plats is None or p in plats)
     out = []
-    if post.get("fb"):
+    if on("fb"):
         out.append("fb_post")
         if (post["fb"].get("comment") or "").strip():
             out.append("fb_comment")
-    if post.get("ig"):
+    if on("ig") and (post["ig"].get("images") or []):
         out.append("ig")
-    if post.get("threads"):
+    if on("threads"):
         out.append("threads")
-        if (post["threads"].get("reply") or "").strip():
-            out.append("threads_reply")
+        out += [reply_key(n) for n in range(1, len(threads_posts(post)))]
     return out
 
 
@@ -232,10 +263,12 @@ def publish_one(item: dict, force: bool) -> str:
                     pid = ig_post(post, files, tid)
                 finally:
                     unstage_images(tid)
-            elif k == "threads_reply":
-                if not st["done"].get("threads"):
-                    raise c.ApiError("Threads 主文沒發成功，回覆跳過")
-                pid = threads_reply(post, st["done"]["threads"])
+            elif k.startswith("threads_reply"):
+                n = int(k[len("threads_reply"):] or 1)
+                parent = st["done"].get("threads" if n == 1 else reply_key(n - 1))
+                if not parent:
+                    raise c.ApiError("前一則 Threads 沒發成功，回覆跳過")
+                pid = threads_reply(post, parent, n)
             else:
                 pid = threads_post(post)
             st["done"][k] = pid
@@ -257,9 +290,10 @@ def publish_one(item: dict, force: bool) -> str:
         ok = [LABEL[k] for k in needed(post) if st["done"].get(k)]
         why = "；".join(f"{LABEL[k]}：{st['errors'].get(k, '未知')}" for k in bad)
         c.push_event("publish_failed", tid, f"「{title}」{('、'.join(ok) + ' 已發；') if ok else ''}{why}",
-                     {"links": st["links"], "failed": bad})
+                     {"links": st["links"], "failed": bad, "kind": post.get("kind", "material")})
         return "failed"
-    c.push_event("publish_done", tid, f"「{title}」已發佈到 FB、IG、Threads", {"links": st["links"]})
+    where = "、".join(dict.fromkeys(LABEL[k].split(" ")[0] for k in needed(post) if k in ("fb_post", "ig", "threads")))
+    c.push_event("publish_done", tid, f"「{title}」已發佈到 {where}", {"links": st["links"], "kind": post.get("kind", "material")})
     return "done"
 
 

@@ -43,7 +43,7 @@ class Fake:
             if p.endswith("/dispatches"):
                 return 204, {}
             if p.endswith("/publish/abc123"):
-                return 200, [{"name": n, "type": "file"} for n in ["post.json", *POST["fb"]["images"], *POST["ig"]["images"]]]
+                return 200, [{"name": n, "type": "file"} for n in ["post.json", *(POST.get("fb") or {}).get("images", []), *(POST.get("ig") or {}).get("images", [])]]
             if p.endswith("/post.json"):
                 return 200, json.dumps(POST).encode()
             if p.endswith(".jpg"):
@@ -64,6 +64,10 @@ class Fake:
             assert files and files["source"][1] == JPG
             self.photos.append(f"ph{self.n}"); self.uploaded.append(files["source"][0])
             return 200, {"id": f"ph{self.n}"}
+        if u.endswith("/P/feed") and not POST["fb"].get("images"):
+            assert "attached_media[0]" not in body, "純文字貼文不附圖"
+            self.fb_text = body["message"]
+            return 200, {"id": "P_post1"}
         if u.endswith("/P/feed"):
             assert body["attached_media[1]"].startswith('{"media_fbid"')
             assert body["message"] == "第一段\n\u3000\n第二段", repr(body["message"])
@@ -80,12 +84,14 @@ class Fake:
         if u.endswith("/IG/media_publish"):
             return 200, {"id": "igm1"}
         if u.endswith("/T/threads"):
+            self.th_n = getattr(self, "th_n", 0) + 1
+            self.th_texts = getattr(self, "th_texts", []) + [body["text"]]
             if body.get("reply_to_id"):
-                assert body["reply_to_id"] == "th1", "回覆要掛在主文底下"
+                assert body["reply_to_id"] == f"th{self.th_n - 1}", "回覆要掛在前一則底下"
                 self.threads_reply = body["text"]
-            return 200, {"id": "tc1"}
+            return 200, {"id": f"tc{self.th_n}"}
         if u.endswith("/T/threads_publish"):
-            return 200, {"id": "th1"}
+            return 200, {"id": f"th{self.th_n}"}
         if method == "GET":
             f = (params or {}).get("fields", "")
             return 200, {"status_code": "FINISHED", "status": "FINISHED", "permalink_url": "https://fb/x",
@@ -163,6 +169,50 @@ def test_overdue_and_unconfirmed():
     publish.main([])
     assert f.events[-1]["type"] == "publish_unconfirmed"
     assert not [x for x in f.calls if "graph" in x[1]], "沒確認的不能發"
+
+
+FLASH = {"id": "abc123", "kind": "flash", "code": "SEO-001", "title": "速報測試", "platforms": ["threads"],
+         "threads": {"posts": ["▞ 標題 ▚\n\n故事", "接下來的重點", "原文（SEJ）：https://x/"]},
+         "fb": {"message": "不該發的 FB", "images": [], "comment": ""}}
+DIGEST = {"id": "abc123", "kind": "digest", "title": "DE 行銷速報｜11/27", "platforms": ["threads", "fb"],
+          "threads": {"posts": ["DE 行銷速報｜11/27\n\n▞ A ▚\n\n▶ https://a/"]},
+          "fb": {"message": "DE 行銷速報｜11/27\n\n▞ A ▚\n▶ https://a/", "images": [], "comment": ""}}
+
+
+def _with_post(post, fn):
+    global POST
+    old = POST
+    POST = post
+    try:
+        fn()
+    finally:
+        POST = old
+
+
+def test_flash_threads_chain_only():
+    def go():
+        setup([{**item(2), "kind": "flash"}])
+        f = Fake(); c.http = f
+        assert publish.main([]) == 0
+        st = json.loads((c.STATE / "abc123.json").read_text())
+        assert set(st["done"]) == {"threads", "threads_reply", "threads_reply2"}, st
+        assert f.th_texts == [publish.keep_blank_lines(x) for x in FLASH["threads"]["posts"]], f.th_texts
+        assert not [x for x in f.calls if x[1].endswith("/P/feed")], "速報沒選 FB 就不發 FB"
+        assert f.events[-1]["type"] == "publish_done" and f.events[-1]["kind"] == "flash" and "Threads" in f.events[-1]["text"]
+        assert "FB" not in f.events[-1]["text"]
+    _with_post(FLASH, go)
+
+
+def test_digest_fb_text_only():
+    def go():
+        setup([{**item(2), "kind": "digest"}])
+        f = Fake(); c.http = f
+        assert publish.main([]) == 0
+        st = json.loads((c.STATE / "abc123.json").read_text())
+        assert set(st["done"]) == {"fb_post", "threads"}, st
+        assert f.fb_text.startswith("DE 行銷速報")
+        assert f.events[-1]["kind"] == "digest"
+    _with_post(DIGEST, go)
 
 
 def test_not_due_untouched():
