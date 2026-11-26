@@ -20,7 +20,7 @@ c.time.sleep = lambda *_: None
 publish.time.sleep = lambda *_: None
 
 POST = {"id": "abc123", "title": "測試貼文", "vocus_url": "https://vocus.cc/article/x",
-        "fb": {"message": "FB 內文", "images": ["fb-01.jpg", "fb-02.jpg"], "comment": "全文 https://vocus.cc/article/x"},
+        "fb": {"message": "第一段\n\n第二段\n", "images": ["fb-01.jpg", "fb-02.jpg"], "comment": "全文 https://vocus.cc/article/x"},
         "ig": {"caption": "IG 內文", "images": ["ig-01.jpg", "ig-02.jpg"]},
         "threads": {"text": "Threads 內文 https://vocus.cc/article/x"}}
 JPG = b"\xff\xd8\xff\xe0fake"
@@ -29,6 +29,7 @@ JPG = b"\xff\xd8\xff\xe0fake"
 class Fake:
     def __init__(self, fail=()):
         self.calls, self.events, self.fail, self.n = [], [], set(fail), 0
+        self.photos, self.uploaded, self.children = [], [], []
 
     def __call__(self, method, url, params=None, data=None, files=None, headers=None, raw=False, timeout=90):
         self.calls.append((method, url.split("?")[0]))
@@ -61,13 +62,20 @@ class Fake:
                 return 400, {"error": {"message": f"假錯誤 {key}", "code": 9}}
         if u.endswith("/P/photos"):
             assert files and files["source"][1] == JPG
+            self.photos.append(f"ph{self.n}"); self.uploaded.append(files["source"][0])
             return 200, {"id": f"ph{self.n}"}
         if u.endswith("/P/feed"):
             assert body["attached_media[1]"].startswith('{"media_fbid"')
+            assert body["message"] == "第一段\n\u3000\n第二段", repr(body["message"])
+            assert [body[f"attached_media[{k}]"] for k in range(2)] == ['{"media_fbid":"%s"}' % i for i in self.photos], "照順序附圖"
             return 200, {"id": "P_post1"}
         if u.endswith("/P_post1/comments"):
             return 200, {"id": "cm1"}
         if u.endswith("/IG/media"):
+            if body.get("is_carousel_item"):
+                self.children.append((f"ct{self.n}", body["image_url"].rsplit("/", 1)[-1]))
+            elif body.get("media_type") == "CAROUSEL":
+                assert body["children"] == ",".join(c for c, _ in self.children), "輪播照順序"
             return 200, {"id": f"ct{self.n}"}
         if u.endswith("/IG/media_publish"):
             return 200, {"id": "igm1"}
@@ -111,6 +119,7 @@ def test_success_and_no_repost():
     st = json.loads((c.STATE / "abc123.json").read_text())
     assert st["result"] == "done" and set(st["done"]) == {"fb_post", "fb_comment", "ig", "threads"}, st
     assert f.events[-1]["type"] == "publish_done" and f.events[-1]["links"]["ig"] == "https://link/x"
+    assert f.uploaded == ["fb-01.jpg", "fb-02.jpg"] and [n for _, n in f.children] == ["ig-01.jpg", "ig-02.jpg"], "圖片照貼文包順序"
     assert json.loads(c.SCHEDULE.read_text())["items"] == []
     assert not (c.ROOT / "tmp" / "abc123").exists(), "IG 暫存圖要刪掉"
     blob = json.dumps(f.events, ensure_ascii=False)

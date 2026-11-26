@@ -11,6 +11,7 @@
    "threads": {"text"}}
 
 不重發：每個平台發完立刻寫 state/<id>.json 並 push；重跑時已發的平台跳過（例：FB 已發、IG 失敗，重跑只補 IG）。
+圖片順序：FB 照 fb.images、IG 照 ig.images 的順序上傳與組輪播（貼文包產生時已依圖卡編號排好並檢查過）。
 """
 import argparse
 import json
@@ -23,6 +24,18 @@ import common as c
 
 PLATFORMS = ("fb_post", "fb_comment", "ig", "threads")
 LABEL = {"fb_post": "FB 貼文", "fb_comment": "FB 留言", "ig": "IG", "threads": "Threads"}
+
+
+# ---------- 文字 ----------
+def keep_blank_lines(text: str) -> str:
+    """段落之間的空行放全形空白（U+3000），FB、IG、Threads 才不會把空行吃掉（Derrick 2026-11-26）。
+    貼文包在私人 repo 產生時已經換好；這裡再保險一次（已換過的不會重複換）。"""
+    lines = [l.rstrip() for l in (text or "").strip("\n").split("\n")]
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return "\n".join("\u3000" if not l.strip() else l for l in lines)
 
 
 # ---------- 讀貼文 ----------
@@ -52,7 +65,7 @@ def fb_post(post, files) -> str:
         r = c.meta("POST", f"{c.GRAPH}/{page}/photos", data={"published": "false", "access_token": tok},
                    files={"source": (n, files[n], "image/jpeg")})
         ids.append(r["id"])
-    data = {"message": post["fb"]["message"], "access_token": tok}
+    data = {"message": keep_blank_lines(post["fb"]["message"]), "access_token": tok}
     for k, i in enumerate(ids):
         data[f"attached_media[{k}]"] = '{"media_fbid":"%s"}' % i
     return c.meta("POST", f"{c.GRAPH}/{page}/feed", data=data)["id"]
@@ -60,7 +73,7 @@ def fb_post(post, files) -> str:
 
 def fb_comment(post, post_id) -> str:
     return c.meta("POST", f"{c.GRAPH}/{post_id}/comments",
-                  data={"message": post["fb"]["comment"], "access_token": c.env("META_PAGE_TOKEN")})["id"]
+                  data={"message": keep_blank_lines(post["fb"]["comment"]), "access_token": c.env("META_PAGE_TOKEN")})["id"]
 
 
 def wait_ready(url_base: str, cid: str, tok: str, field: str, ok: str, limit=300) -> None:
@@ -106,7 +119,7 @@ def unstage_images(todo_id: str) -> None:
 def ig_post(post, files, todo_id) -> str:
     ig, tok = c.env("META_IG_USER_ID"), c.env("META_PAGE_TOKEN")
     urls = stage_images(todo_id, post["ig"]["images"], files)
-    cap = post["ig"]["caption"]
+    cap = keep_blank_lines(post["ig"]["caption"])
     if len(urls) == 1:
         cid = c.meta("POST", f"{c.GRAPH}/{ig}/media", data={"image_url": urls[0], "caption": cap, "access_token": tok})["id"]
     else:
@@ -123,7 +136,7 @@ def ig_post(post, files, todo_id) -> str:
 
 def threads_post(post) -> str:
     uid, tok = c.env("THREADS_USER_ID"), c.env("THREADS_TOKEN")
-    text = post["threads"]["text"]
+    text = keep_blank_lines(post["threads"]["text"])
     if len(text) > 500:
         raise c.ApiError(f"Threads 超過 500 字（{len(text)}）")
     cid = c.meta("POST", f"{c.THREADS}/{uid}/threads", data={"media_type": "TEXT", "text": text, "access_token": tok})["id"]
