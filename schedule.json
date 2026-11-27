@@ -1,12 +1,14 @@
 {
- "rev": 18,
+ "rev": 19,
  "items": [
   {
    "id": "2026-11-27-2c026472a115",
    "at": "2026-11-27T17:00:00+08:00",
-   "status": "scheduled",
+   "status": "publishing",
    "title": "速報 BRAND-001 Visa 五年來第一次換形象，字標卻一筆沒動",
-   "kind": "flash"
+   "kind": "flash",
+   "prev_status": "scheduled",
+   "dispatched_at": "2026-11-27T17:00:04+08:00"
   },
   {
    "id": "2026-11-27-5d0c8843c899",
@@ -44,5 +46,5 @@
    "kind": "flash"
   }
  ],
- "updated_at": "2026-11-27T16:46:04+08:00"
+ "updated_at": "2026-11-27T17:00:04+08:00"
 }
