@@ -1,5 +1,5 @@
 {
- "rev": 9,
+ "rev": 10,
  "items": [
   {
    "id": "2026-11-27-1e4eea257064",
@@ -28,7 +28,14 @@
    "status": "scheduled",
    "title": "速報 BRAND-002 麥當勞結束世界盃合作，轉向自有 IP",
    "kind": "flash"
+  },
+  {
+   "id": "2026-11-27-6f4d41c038d1",
+   "at": "2026-11-27T19:10:00+08:00",
+   "status": "scheduled",
+   "title": "速報 AI-002 Canva 推出 AI 總開關：一次關掉八項 Magic AI 工具",
+   "kind": "flash"
   }
  ],
- "updated_at": "2026-11-27T15:33:07+08:00"
+ "updated_at": "2026-11-27T15:34:21+08:00"
 }
