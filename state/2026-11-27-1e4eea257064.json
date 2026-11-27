@@ -4,13 +4,13 @@
   "threads": "18104557496397938"
  },
  "errors": {
-  "threads_reply": "前一則 Threads 沒發成功，回覆跳過"
+  "threads_reply": "Application does not have permission for this action（code 10）"
  },
  "links": {
   "threads": "https://www.threads.com/@de.marketing_archive/post/DgPRrYlG9iV"
  },
  "scheduled_at": "2026-11-27T16:15:00+08:00",
- "updated_at": "2026-11-27T16:43:00+08:00",
+ "updated_at": "2026-11-27T16:43:02+08:00",
  "result": "failed",
  "finished_at": "2026-11-27T16:15:28+08:00"
 }
