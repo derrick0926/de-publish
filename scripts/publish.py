@@ -2,7 +2,8 @@
 
 用法：python scripts/publish.py [--ids id1,id2] [--force]
   沒給 --ids：處理排程表裡 status=publishing 的，以及已到時間的 scheduled／preview。
-  --force：重試用（發文助手在 Derrick 按「重試」時帶上），不套用 60 分鐘逾時規則。
+  --force：重試用，不套用 60 分鐘逾時規則。2026-11-27 起重試改成「排程表項目帶 force: true、時間設成兩分鐘後」，
+  由鬧鐘正常觸發；手動在 Actions 帶 --ids --force 仍然可用。已發成功的平台一律跳過。
 
 貼文內容在私人 repo 的 publish/<todo id>/（post.json＋JPEG），發文前一刻才讀。格式：
   {"id", "code", "line", "title", "vocus_url",
@@ -488,7 +489,7 @@ def main(argv=None) -> int:
     results = {}
     for item in sorted(todo, key=lambda i: i["at"]):
         print(f"── {item['id']}（{item['at']}）")
-        results[item["id"]] = publish_one(item, a.force)
+        results[item["id"]] = publish_one(item, a.force or bool(item.get("force")))   # 排程表項目帶 force＝重試（2026-11-27 起由發文助手排進來，不再直接觸發 publish.yml）
         c.pull()
         s = c.load_schedule()
         s["items"] = [i for i in s["items"] if i["id"] != item["id"]]

@@ -386,6 +386,20 @@ def test_threads_container_not_synced_yet_retries():
     _with_post(FLASH, go)
 
 
+def test_retry_via_schedule_force():
+    """重試走排程表：項目帶 force、已過 2 小時也照發，只補失敗的平台（主文已發不重發）。"""
+    def go():
+        setup([{**item(120), "kind": "flash", "force": True}])
+        st0 = {"id": "abc123", "done": {"threads": "th0"}, "errors": {"threads_reply": "code 10"}, "links": {"threads": "https://x"}}
+        c.STATE.mkdir(parents=True, exist_ok=True); (c.STATE / "abc123.json").write_text(json.dumps(st0))
+        f = Fake(); c.http = f
+        assert publish.main([]) == 0
+        st = json.loads((c.STATE / "abc123.json").read_text())
+        assert st["result"] == "done" and st["done"]["threads"] == "th0" and "threads_reply" in st["done"]
+        assert len(f.th_texts) == 1, "只補回覆，主文不重發"
+    _with_post(FLASH, go)
+
+
 def test_not_due_untouched():
     setup([item(-30)])
     f = Fake(); c.http = f
