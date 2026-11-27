@@ -1,4 +1,4 @@
-"""發佈：把到時間的貼文發到 FB（多圖＋粉專留言 vocus 連結）、IG（輪播）、Threads（純文字）。
+"""發佈：把到時間的貼文發到 FB（多圖＋粉專留言 vocus 連結）、IG（輪播）、Threads（純文字；速報主文可帶圖）。
 
 用法：python scripts/publish.py [--ids id1,id2] [--force]
   沒給 --ids：處理排程表裡 status=publishing 的，以及已到時間的 scheduled／preview。
@@ -11,8 +11,8 @@
    "threads": {"text", "reply"}}   # reply（2026-11-27 起）：第一則回覆，放 CTA 與 vocus 連結；沒有就不發回覆
 速報（2026-11-27 起，kind=flash／digest）：
   {"id", "kind", "code", "title", "platforms": ["threads", …],
-   "threads": {"posts": ["主文", "回覆 1", "回覆 2", …]},   # 第一則主文，其餘依序串成回覆（每則掛在前一則底下）
-   "fb": {"message", "images": [], "comment"}}              # 圖空的就發純文字貼文；沒列在 platforms 的平台不發
+   "threads": {"posts": ["主文", "回覆 1", "回覆 2", …], "images": ["01.jpg", …]},   # 第一則主文（圖全掛這則：1 張單圖、2–10 張輪播），其餘依序串成純文字回覆
+   "fb": {"message", "images": ["01.jpg", …], "comment"}}   # 圖空的就發純文字貼文；沒列在 platforms 的平台不發；圖可以是 JPEG 或 PNG（2026-11-27 起）
 
 不重發：每個平台發完立刻寫 state/<id>.json 並 push；重跑時已發的平台跳過（例：FB 已發、IG 失敗，重跑只補 IG）。
 圖片順序：FB 照 fb.images、IG 照 ig.images 的順序上傳與組輪播（貼文包產生時已依圖卡編號排好並檢查過）。
@@ -75,15 +75,20 @@ def fetch_package(todo_id: str) -> tuple[dict, dict[str, bytes]]:
     if "post.json" not in names:
         raise c.ApiError(f"私人 repo 找不到 publish/{todo_id}/post.json")
     post = json.loads(c.gh("GET", base + "/post.json?ref=main", raw=True))
-    want = set((post.get("fb") or {}).get("images", [])) | set((post.get("ig") or {}).get("images", []))
+    want = set((post.get("fb") or {}).get("images", [])) | set((post.get("ig") or {}).get("images", [])) \
+        | set((post.get("threads") or {}).get("images", []))
     missing = want - names
     if missing:
         raise c.ApiError(f"缺圖：{', '.join(sorted(missing))}")
     files = {n: c.gh("GET", f"{base}/{n}?ref=main", raw=True) for n in sorted(want)}
     for n, b in files.items():
-        if not b.startswith(b"\xff\xd8"):
-            raise c.ApiError(f"{n} 不是 JPEG")
+        if not (b.startswith(b"\xff\xd8") or b.startswith(b"\x89PNG")):
+            raise c.ApiError(f"{n} 不是 JPEG／PNG")
     return post, files
+
+
+def mime(b: bytes) -> str:
+    return "image/png" if b.startswith(b"\x89PNG") else "image/jpeg"
 
 
 # ---------- 各平台 ----------
@@ -92,7 +97,7 @@ def fb_post(post, files) -> str:
     ids = []
     for n in post["fb"].get("images") or []:
         r = c.meta("POST", f"{c.GRAPH}/{page}/photos", data={"published": "false", "access_token": tok},
-                   files={"source": (n, files[n], "image/jpeg")})
+                   files={"source": (n, files[n], mime(files[n]))})
         ids.append(r["id"])
     data = {"message": keep_blank_lines(post["fb"]["message"]), "access_token": tok}
     for k, i in enumerate(ids):   # 沒圖（速報）就只有文字
@@ -119,12 +124,12 @@ def wait_ready(url_base: str, cid: str, tok: str, field: str, ok: str, limit=300
 
 
 def stage_images(todo_id: str, names, files) -> list[str]:
-    """IG 要公開網址：圖暫放到這個公開 repo 的 tmp/<id>/，發完刪掉。"""
+    """IG 與 Threads 要公開網址：圖暫放到這個公開 repo 的 tmp/<id>/，發完刪掉。"""
     d = c.ROOT / "tmp" / todo_id
     d.mkdir(parents=True, exist_ok=True)
     for n in names:
         (d / n).write_bytes(files[n])
-    c.commit_push(f"tmp: {todo_id} 的 IG 圖（發完刪除）", [f"tmp/{todo_id}"])
+    c.commit_push(f"tmp: {todo_id} 的圖（發完刪除）", [f"tmp/{todo_id}"])
     sha = c.git("rev-parse", "HEAD").strip() if not os.environ.get("DRY_GIT") else "main"
     urls = [f"https://raw.githubusercontent.com/{c.OWNER}/{c.PUB}/{sha}/tmp/{todo_id}/{n}" for n in names]
     for u in urls:   # 等 CDN 拿得到
@@ -142,7 +147,7 @@ def unstage_images(todo_id: str) -> None:
     d = c.ROOT / "tmp" / todo_id
     if d.exists():
         shutil.rmtree(d)
-        c.commit_push(f"tmp: 刪除 {todo_id} 的 IG 圖", [f"tmp/{todo_id}"])
+        c.commit_push(f"tmp: 刪除 {todo_id} 的圖", [f"tmp/{todo_id}"])
 
 
 def ig_post(post, files, todo_id) -> str:
@@ -177,8 +182,36 @@ def threads_text(text: str, reply_to: str = "") -> str:
     return c.meta("POST", f"{c.THREADS}/{uid}/threads_publish", data={"creation_id": cid, "access_token": tok})["id"]
 
 
-def threads_post(post) -> str:
-    return threads_text(threads_posts(post)[0])
+def threads_image(text: str, urls: list[str]) -> str:
+    """發一則帶圖的 Threads 主文：1 張單圖、2–10 張輪播（速報的圖全掛主文，回覆仍是純文字）。"""
+    uid, tok = c.env("THREADS_USER_ID"), c.env("THREADS_TOKEN")
+    text = keep_blank_lines(text)
+    if len(text) > 500:
+        raise c.ApiError(f"Threads 超過 500 字（{len(text)}）")
+    if len(urls) == 1:
+        cid = c.meta("POST", f"{c.THREADS}/{uid}/threads", data={"media_type": "IMAGE", "image_url": urls[0], "text": text, "access_token": tok})["id"]
+    else:
+        kids = []
+        for u in urls:
+            k = c.meta("POST", f"{c.THREADS}/{uid}/threads", data={"media_type": "IMAGE", "image_url": u, "is_carousel_item": "true", "access_token": tok})["id"]
+            wait_ready(c.THREADS, k, tok, "status", "FINISHED", limit=120)
+            kids.append(k)
+        cid = c.meta("POST", f"{c.THREADS}/{uid}/threads", data={"media_type": "CAROUSEL", "children": ",".join(kids), "text": text, "access_token": tok})["id"]
+    wait_ready(c.THREADS, cid, tok, "status", "FINISHED", limit=180)
+    return c.meta("POST", f"{c.THREADS}/{uid}/threads_publish", data={"creation_id": cid, "access_token": tok})["id"]
+
+
+def threads_post(post, files=None, todo_id: str = "") -> str:
+    names = (post.get("threads") or {}).get("images") or []
+    if not names:
+        return threads_text(threads_posts(post)[0])
+    if len(names) > 10:
+        raise c.ApiError(f"Threads 圖片 {len(names)} 張，超過 10 張")
+    urls = stage_images(todo_id, names, files or {})
+    try:
+        return threads_image(threads_posts(post)[0], urls)
+    finally:
+        unstage_images(todo_id)
 
 
 def threads_reply(post, parent_id: str, n: int = 1) -> str:
@@ -270,7 +303,7 @@ def publish_one(item: dict, force: bool) -> str:
                     raise c.ApiError("前一則 Threads 沒發成功，回覆跳過")
                 pid = threads_reply(post, parent, n)
             else:
-                pid = threads_post(post)
+                pid = threads_post(post, files, tid)
             st["done"][k] = pid
             st["errors"].pop(k, None)
             link = permalink(k, pid)

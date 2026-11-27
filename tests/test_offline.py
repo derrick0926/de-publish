@@ -24,6 +24,7 @@ POST = {"id": "abc123", "title": "測試貼文", "vocus_url": "https://vocus.cc/
         "ig": {"caption": "IG 內文", "images": ["ig-01.jpg", "ig-02.jpg"]},
         "threads": {"text": "Threads 內文", "reply": "完整拆解在這：https://vocus.cc/article/x"}}
 JPG = b"\xff\xd8\xff\xe0fake"
+PNG = b"\x89PNG\r\n\x1a\nfake"
 
 
 class Fake:
@@ -43,11 +44,13 @@ class Fake:
             if p.endswith("/dispatches"):
                 return 204, {}
             if p.endswith("/publish/abc123"):
-                return 200, [{"name": n, "type": "file"} for n in ["post.json", *(POST.get("fb") or {}).get("images", []), *(POST.get("ig") or {}).get("images", [])]]
+                return 200, [{"name": n, "type": "file"} for n in ["post.json", *(POST.get("fb") or {}).get("images", []), *(POST.get("ig") or {}).get("images", []), *(POST.get("threads") or {}).get("images", [])]]
             if p.endswith("/post.json"):
                 return 200, json.dumps(POST).encode()
             if p.endswith(".jpg"):
                 return 200, JPG
+            if p.endswith(".png"):
+                return 200, PNG
             if "/runs" in p:
                 return 200, {"workflow_runs": []}
             raise AssertionError(f"沒預期的 GitHub 呼叫 {method} {p}")
@@ -61,7 +64,8 @@ class Fake:
                 self.fail.discard(key)
                 return 400, {"error": {"message": f"假錯誤 {key}", "code": 9}}
         if u.endswith("/P/photos"):
-            assert files and files["source"][1] == JPG
+            assert files and files["source"][1] in (JPG, PNG)
+            assert files["source"][2] == ("image/png" if files["source"][1] == PNG else "image/jpeg"), "PNG 要用 image/png 上傳"
             self.photos.append(f"ph{self.n}"); self.uploaded.append(files["source"][0])
             return 200, {"id": f"ph{self.n}"}
         if u.endswith("/P/feed") and not POST["fb"].get("images"):
@@ -69,9 +73,11 @@ class Fake:
             self.fb_text = body["message"]
             return 200, {"id": "P_post1"}
         if u.endswith("/P/feed"):
-            assert body["attached_media[1]"].startswith('{"media_fbid"')
-            assert body["message"] == "第一段\n\u3000\n第二段", repr(body["message"])
-            assert [body[f"attached_media[{k}]"] for k in range(2)] == ['{"media_fbid":"%s"}' % i for i in self.photos], "照順序附圖"
+            n_img = len(POST["fb"]["images"])
+            assert body[f"attached_media[{n_img - 1}]"].startswith('{"media_fbid"') and f"attached_media[{n_img}]" not in body
+            if n_img == 2:
+                assert body["message"] == "第一段\n\u3000\n第二段", repr(body["message"])
+            assert [body[f"attached_media[{k}]"] for k in range(n_img)] == ['{"media_fbid":"%s"}' % i for i in self.photos], "照順序附圖"
             return 200, {"id": "P_post1"}
         if u.endswith("/P_post1/comments"):
             return 200, {"id": "cm1"}
@@ -83,9 +89,25 @@ class Fake:
             return 200, {"id": f"ct{self.n}"}
         if u.endswith("/IG/media_publish"):
             return 200, {"id": "igm1"}
+        if u.endswith("/T/threads") and (body.get("is_carousel_item") or body.get("media_type") == "CAROUSEL"):
+            # 速報帶圖：輪播子項不算一則貼文
+            if body.get("is_carousel_item"):
+                assert body["media_type"] == "IMAGE" and "text" not in body
+                self.th_kids = getattr(self, "th_kids", []) + [(f"tk{self.n}", body["image_url"].rsplit("/", 1)[-1])]
+                return 200, {"id": f"tk{self.n}"}
+            assert body["children"] == ",".join(k for k, _ in self.th_kids), "Threads 輪播照順序"
+            self.th_n = getattr(self, "th_n", 0) + 1
+            self.th_texts = getattr(self, "th_texts", []) + [body["text"]]
+            self.th_media = "carousel"
+            return 200, {"id": f"tc{self.th_n}"}
         if u.endswith("/T/threads"):
             self.th_n = getattr(self, "th_n", 0) + 1
             self.th_texts = getattr(self, "th_texts", []) + [body["text"]]
+            if body.get("media_type") == "IMAGE":
+                assert not body.get("reply_to_id"), "回覆串維持純文字"
+                self.th_media = "image:" + body["image_url"].rsplit("/", 1)[-1]
+            else:
+                assert body["media_type"] == "TEXT"
             if body.get("reply_to_id"):
                 assert body["reply_to_id"] == f"th{self.th_n - 1}", "回覆要掛在前一則底下"
                 self.threads_reply = body["text"]
@@ -213,6 +235,38 @@ def test_digest_fb_text_only():
         assert f.fb_text.startswith("DE 行銷速報")
         assert f.events[-1]["kind"] == "digest"
     _with_post(DIGEST, go)
+
+
+FLASH_IMG = {**FLASH, "threads": {**FLASH["threads"], "images": ["01.jpg", "02.png", "03.jpg"]}}
+FLASH_ONE = {**FLASH, "platforms": ["threads", "fb"], "threads": {**FLASH["threads"], "images": ["01.png"]},
+             "fb": {"message": "▞ 標題 ▚\n\n故事", "images": ["01.png"], "comment": "原文（SEJ）：https://x/"}}
+
+
+def test_flash_with_images_carousel():
+    """速報 3 張圖：主文是輪播（照順序、含 PNG），回覆仍是純文字；tmp/ 圖發完刪掉。"""
+    def go():
+        setup([{**item(2), "kind": "flash"}])
+        f = Fake(); c.http = f
+        assert publish.main([]) == 0
+        st = json.loads((c.STATE / "abc123.json").read_text())
+        assert set(st["done"]) == {"threads", "threads_reply", "threads_reply2"}, st
+        assert f.th_media == "carousel" and [n for _, n in f.th_kids] == ["01.jpg", "02.png", "03.jpg"], f.th_kids
+        assert len(f.th_texts) == 3, "子項不算貼文"
+        assert not (c.ROOT / "tmp" / "abc123").exists(), "公開 repo 的圖要刪掉"
+    _with_post(FLASH_IMG, go)
+
+
+def test_flash_single_image_and_fb():
+    """速報 1 張 PNG、勾 FB：Threads 單圖主文，FB 用 image/png 上傳成單圖貼文。"""
+    def go():
+        setup([{**item(2), "kind": "flash"}])
+        f = Fake(); c.http = f
+        assert publish.main([]) == 0
+        st = json.loads((c.STATE / "abc123.json").read_text())
+        assert {"threads", "fb_post", "fb_comment"} <= set(st["done"]), st
+        assert f.th_media == "image:01.png"
+        assert f.uploaded == ["01.png"]
+    _with_post(FLASH_ONE, go)
 
 
 def test_not_due_untouched():
