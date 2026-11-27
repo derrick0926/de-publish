@@ -134,7 +134,14 @@ if _m.r2_enabled():
         try:
             url = _m.r2_put(key, tf, "text/plain")
             code, b = get(url, {})
-            report(code == 200, "R2 公開讀取", "可以（Threads／FB 抓得到）" if code == 200 else f"HTTP {code}：bucket 的 Public access 沒開，或 R2_PUBLIC_BASE 不對")
+            import re as _re
+            base = os.environ["R2_PUBLIC_BASE"]
+            shape = ("r2.dev 公開網址" if _re.fullmatch(r"https://pub-[0-9a-f]{32}\.r2\.dev", base) else
+                     "S3 API 端點（不是公開網址，要改成 r2.dev 子網域或自訂網域）" if "r2.cloudflarestorage.com" in base else
+                     "結尾多了斜線" if base.endswith("/") else
+                     "含路徑（應該只到網域為止）" if _re.match(r"https://[^/]+/.+", base) else
+                     "不是 https:// 開頭" if not base.startswith("https://") else "自訂網域")
+            report(code == 200, "R2 公開讀取", "可以（Threads／FB 抓得到）" if code == 200 else f"HTTP {code}；R2_PUBLIC_BASE 看起來是「{shape}」。403 多半是 bucket 的 Public access（R2.dev subdomain）沒開到 Enabled，或網址對應到別的 bucket")
         finally:
             _m.r2_delete([key])
     except Exception as e:
