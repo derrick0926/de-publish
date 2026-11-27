@@ -1,5 +1,5 @@
 {
- "rev": 41,
+ "rev": 42,
  "items": [
   {
    "id": "2026-11-27-76b3168c8fd1",
@@ -7,7 +7,14 @@
    "status": "scheduled",
    "title": "速報 CASE-002 LV〈廣州，好嘢〉：用早茶點心卡的「小中大特頂」串起廣州日常",
    "kind": "flash"
+  },
+  {
+   "id": "c523b5468a3f",
+   "at": "2026-11-28T12:00:00+08:00",
+   "status": "preview",
+   "title": "SEO-004 Google 發布 Google-Agent 爬蟲指南：怎麼辨認真的 AI 代理人、別被防火牆擋掉",
+   "kind": "material"
   }
  ],
- "updated_at": "2026-11-27T21:11:25+08:00"
+ "updated_at": "2026-11-27T21:17:06+08:00"
 }
