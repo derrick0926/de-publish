@@ -1,13 +1,15 @@
 {
- "rev": 1,
+ "rev": 2,
  "items": [
   {
    "id": "2026-11-27-ed85b37c43fd",
    "at": "2026-11-27T15:05:00+08:00",
-   "status": "scheduled",
+   "status": "publishing",
    "title": "速報 DIGITAL-001 ChatGPT 廣告不給看「是哪段對話觸發的」：OpenAI 不打算做提示詞報表",
-   "kind": "flash"
+   "kind": "flash",
+   "prev_status": "scheduled",
+   "dispatched_at": "2026-11-27T15:05:04+08:00"
   }
  ],
- "updated_at": "2026-11-27T14:51:54+08:00"
+ "updated_at": "2026-11-27T15:05:04+08:00"
 }
