@@ -112,6 +112,14 @@ if S["THREADS_TOKEN"]:
             report(True, "Threads 發文額度", f"24 小時內已用 {q.get('quota_usage', 0)}／{q.get('config', {}).get('quota_total', 250)}")
         else:
             report(None, "Threads 發文額度", "讀不到：" + err(b))
+        # 回覆權限（threads_manage_replies）：速報串文與一般素材的第一則回覆都要用；缺它主文會發出、回覆被拒（code 10，2026-11-27 實發時遇到）
+        code, b = get(f"{THREADS}/{S['THREADS_USER_ID']}/threads_publishing_limit",
+                      {"fields": "reply_quota_usage,reply_config", "access_token": S["THREADS_TOKEN"]})
+        if code == 200 and b.get("data"):
+            q = b["data"][0]
+            report(True, "Threads 回覆權限", f"有（24 小時內已回覆 {q.get('reply_quota_usage', 0)}／{q.get('reply_config', {}).get('quota_total', 1000)}）")
+        else:
+            report(False, "Threads 回覆權限", "缺 threads_manage_replies：請在 Meta 應用程式的 Threads 使用案例加這個權限，重跑 setup_tokens.py threads 換權杖（" + err(b) + "）")
 
 # ---- GitHub 金鑰 ----
 if S["PUBLISH_GH_TOKEN"]:
