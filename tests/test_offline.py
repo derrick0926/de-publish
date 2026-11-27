@@ -61,6 +61,9 @@ class Fake:
         body = dict(data or {}) | dict(params or {})
         assert body.get("access_token") in ("tokP", "tokT"), u
         for key in self.fail:
+            if key.startswith("code24:") and key[7:] in u:   # Threads 剛建好的容器還沒同步：回 media cannot be found（code 24）一次
+                self.fail.discard(key); self.code24 = getattr(self, "code24", 0) + 1
+                return 400, {"error": {"message": "The media with id 1 cannot be found.", "code": 24}}
             if key in u:
                 self.fail.discard(key)
                 return 400, {"error": {"message": f"假錯誤 {key}", "code": 9}}
@@ -370,6 +373,17 @@ def test_media_download_404_fails():
         st = json.loads((c.STATE / "abc123.json").read_text())
         assert "404" in st["errors"]["threads"]
     _with_post({**FLASH, "threads": {**FLASH["threads"], "media": [{"type": "image", "url": "https://pic.test/404.png"}]}}, go)
+
+
+def test_threads_container_not_synced_yet_retries():
+    """容器剛建好查狀態、或發佈時回 code 24 → 當作還沒好，等一下再試，不算失敗（2026-11-27 16:15 實發踩到）。"""
+    def go():
+        setup([{**item(2), "kind": "flash"}])
+        f = Fake(fail={"code24:/tc1", "code24:/T/threads_publish"}); c.http = f
+        assert publish.main([]) == 0
+        st = json.loads((c.STATE / "abc123.json").read_text())
+        assert "threads" in st["done"] and f.code24 == 2
+    _with_post(FLASH, go)
 
 
 def test_not_due_untouched():

@@ -213,9 +213,18 @@ def fb_comment(post, post_id) -> str:
 
 
 def wait_ready(url_base: str, cid: str, tok: str, field: str, ok: str, limit=300) -> None:
+    """等容器處理完。剛建好的容器查狀態有時會回「media cannot be found（code 24）」（還沒同步），當成還沒好、繼續等；
+    2026-11-27 16:15 的速報就是這樣失敗的，之前成功只是運氣。"""
     t0 = time.monotonic()
+    time.sleep(3)
     while True:
-        st = c.meta("GET", f"{url_base}/{cid}", params={"fields": field, "access_token": tok}).get(field, "")
+        try:
+            st = c.meta("GET", f"{url_base}/{cid}", params={"fields": field, "access_token": tok}).get(field, "")
+        except c.ApiError as e:
+            if "code 24" in str(e) and time.monotonic() - t0 < limit:
+                time.sleep(5)
+                continue
+            raise
         if st == ok:
             return
         if st in ("ERROR", "EXPIRED"):
@@ -281,7 +290,19 @@ def threads_text(text: str, reply_to: str = "") -> str:
         data["reply_to_id"] = reply_to
     cid = c.meta("POST", f"{c.THREADS}/{uid}/threads", data=data)["id"]
     wait_ready(c.THREADS, cid, tok, "status", "FINISHED", limit=120)
-    return c.meta("POST", f"{c.THREADS}/{uid}/threads_publish", data={"creation_id": cid, "access_token": tok})["id"]
+    return threads_publish(uid, tok, cid)
+
+
+def threads_publish(uid: str, tok: str, cid: str) -> str:
+    """發佈容器。發佈那一刻也可能遇到「media cannot be found（code 24）」（容器剛 FINISHED 還沒同步），最多重試 6 次、每次等 10 秒。"""
+    for attempt in range(6):
+        try:
+            return c.meta("POST", f"{c.THREADS}/{uid}/threads_publish", data={"creation_id": cid, "access_token": tok})["id"]
+        except c.ApiError as e:
+            if "code 24" in str(e) and attempt < 5:
+                time.sleep(10)
+                continue
+            raise
 
 
 def _th_item(kind: str, url: str) -> dict:
@@ -307,7 +328,7 @@ def threads_media(text: str, items: list[tuple[str, str]]) -> str:
             kids.append(k)
         cid = c.meta("POST", f"{c.THREADS}/{uid}/threads", data={"media_type": "CAROUSEL", "children": ",".join(kids), "text": text, "access_token": tok})["id"]
     wait_ready(c.THREADS, cid, tok, "status", "FINISHED", limit=600 if has_video else 180)
-    return c.meta("POST", f"{c.THREADS}/{uid}/threads_publish", data={"creation_id": cid, "access_token": tok})["id"]
+    return threads_publish(uid, tok, cid)
 
 
 def threads_post(post, files=None, todo_id: str = "") -> str:
