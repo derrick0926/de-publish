@@ -127,6 +127,16 @@ if _m.r2_enabled():
     try:
         n, total = _m.r2_usage()
         report(total < _m.R2_LINGER_LIMIT, "R2 殘留", f"flash/ 有 {n} 個檔、{total / 1048576:.0f} MB（正常應接近 0；上限 2 GB 會停止上傳）")
+        # 公開讀取：放一個 1 位元組的測試檔，從 R2_PUBLIC_BASE 讀回來，再刪掉（Threads／FB 抓檔走的就是這條路）
+        import tempfile, pathlib
+        tf = pathlib.Path(tempfile.mkdtemp()) / "check.txt"; tf.write_bytes(b"1")
+        key = "flash/_setup-check.txt"
+        try:
+            url = _m.r2_put(key, tf, "text/plain")
+            code, b = get(url, {})
+            report(code == 200, "R2 公開讀取", "可以（Threads／FB 抓得到）" if code == 200 else f"HTTP {code}：bucket 的 Public access 沒開，或 R2_PUBLIC_BASE 不對")
+        finally:
+            _m.r2_delete([key])
     except Exception as e:
         report(False, "R2 連線", f"讀不到 bucket：{str(e)[:120]}")
 else:
