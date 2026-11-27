@@ -1,5 +1,5 @@
 {
- "rev": 47,
+ "rev": 48,
  "items": [
   {
    "id": "c523b5468a3f",
@@ -14,7 +14,14 @@
    "status": "scheduled",
    "title": "CASE-005 Heineken〈Pub Succession〉是史上最成功的失敗廣告嗎？",
    "kind": "material"
+  },
+  {
+   "id": "6b7d4e1233f8",
+   "at": "2026-11-30T20:00:00+08:00",
+   "status": "preview",
+   "title": "B2B-002 LinkedIn：讓 B2B 品牌更「好買」",
+   "kind": "material"
   }
  ],
- "updated_at": "2026-11-27T23:03:05+08:00"
+ "updated_at": "2026-11-28T00:25:40+08:00"
 }
