@@ -1,5 +1,5 @@
 {
- "rev": 45,
+ "rev": 46,
  "items": [
   {
    "id": "c523b5468a3f",
@@ -7,7 +7,14 @@
    "status": "scheduled",
    "title": "SEO-004 Google 發布 Google-Agent 爬蟲指南：怎麼辨認真的 AI 代理人、別被防火牆擋掉",
    "kind": "material"
+  },
+  {
+   "id": "ca4a0d0788ba",
+   "at": "2026-11-29T20:00:00+08:00",
+   "status": "preview",
+   "title": "CASE-005 Heineken〈Pub Succession〉是史上最成功的失敗廣告嗎？",
+   "kind": "material"
   }
  ],
- "updated_at": "2026-11-27T22:01:46+08:00"
+ "updated_at": "2026-11-27T22:55:13+08:00"
 }
