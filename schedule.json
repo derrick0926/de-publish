@@ -1,12 +1,14 @@
 {
- "rev": 34,
+ "rev": 35,
  "items": [
   {
    "id": "2026-11-27-8a5e5b524395",
    "at": "2026-11-27T19:40:00+08:00",
-   "status": "scheduled",
+   "status": "publishing",
    "title": "速報 SEO-003 Google 爬蟲文件新增 pageburst，另有 11 個既有機器人",
-   "kind": "flash"
+   "kind": "flash",
+   "prev_status": "scheduled",
+   "dispatched_at": "2026-11-27T19:40:04+08:00"
   },
   {
    "id": "2026-11-27-e0c1be8a37c7",
@@ -23,5 +25,5 @@
    "kind": "flash"
   }
  ],
- "updated_at": "2026-11-27T19:23:18+08:00"
+ "updated_at": "2026-11-27T19:40:04+08:00"
 }
