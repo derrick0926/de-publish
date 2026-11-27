@@ -3,10 +3,12 @@
  "done": {
   "threads": "18201107944387819"
  },
- "errors": {},
+ "errors": {
+  "threads_reply": "Application does not have permission for this action（code 10）"
+ },
  "links": {
   "threads": "https://www.threads.com/@de.marketing_archive/post/DgPbLiLG7Fz"
  },
  "scheduled_at": "2026-11-27T18:05:00+08:00",
- "updated_at": "2026-11-27T18:06:02+08:00"
+ "updated_at": "2026-11-27T18:06:04+08:00"
 }
