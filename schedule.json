@@ -1,12 +1,14 @@
 {
- "rev": 39,
+ "rev": 40,
  "items": [
   {
    "id": "2026-11-27-85b4cb5d0781",
    "at": "2026-11-27T21:10:00+08:00",
-   "status": "scheduled",
+   "status": "publishing",
    "title": "速報 SEO-001 黑五 AI 購物答案改引用「最佳清單」文，品牌官網幾乎沒份",
-   "kind": "flash"
+   "kind": "flash",
+   "prev_status": "scheduled",
+   "dispatched_at": "2026-11-27T21:10:04+08:00"
   },
   {
    "id": "2026-11-27-76b3168c8fd1",
@@ -16,5 +18,5 @@
    "kind": "flash"
   }
  ],
- "updated_at": "2026-11-27T20:53:35+08:00"
+ "updated_at": "2026-11-27T21:10:04+08:00"
 }
