@@ -133,7 +133,7 @@ if _m.r2_enabled():
         key = "flash/_setup-check.txt"
         try:
             url = _m.r2_put(key, tf, "text/plain")
-            code, b = get(url, {})
+            code, b = get(url, {}, headers={"User-Agent": "Mozilla/5.0 de-publish setup-check"})   # r2.dev 會擋沒有 UA 的請求（回 403）
             import re as _re
             base = os.environ["R2_PUBLIC_BASE"]
             shape = ("r2.dev 公開網址" if _re.fullmatch(r"https://pub-[0-9a-f]{32}\.r2\.dev", base) else
