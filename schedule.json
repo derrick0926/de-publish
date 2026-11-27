@@ -1,12 +1,14 @@
 {
- "rev": 43,
+ "rev": 44,
  "items": [
   {
    "id": "2026-11-27-76b3168c8fd1",
    "at": "2026-11-27T22:00:00+08:00",
-   "status": "scheduled",
+   "status": "publishing",
    "title": "速報 CASE-002 LV〈廣州，好嘢〉：用早茶點心卡的「小中大特頂」串起廣州日常",
-   "kind": "flash"
+   "kind": "flash",
+   "prev_status": "scheduled",
+   "dispatched_at": "2026-11-27T22:00:05+08:00"
   },
   {
    "id": "c523b5468a3f",
@@ -16,5 +18,5 @@
    "kind": "material"
   }
  ],
- "updated_at": "2026-11-27T21:46:51+08:00"
+ "updated_at": "2026-11-27T22:00:05+08:00"
 }
