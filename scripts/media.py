@@ -5,6 +5,8 @@
 R2 設定（de-publish 的 Secrets）：R2_ACCOUNT_ID、R2_ACCESS_KEY_ID、R2_SECRET_ACCESS_KEY、R2_BUCKET、
 R2_PUBLIC_BASE（bucket 的公開網址，例 https://media.example.com 或 https://pub-xxxx.r2.dev，結尾不加斜線）。
 五個都有才算啟用；沒有 R2 時影片網址會讓那則發佈失敗（PM 通知），圖片網址照常。
+免費額度（10 GB-月、Class A 100 萬、Class B 1,000 萬）：檔案發完就刪，正常用量不到 1%。停損：上傳前檢查 flash/ 殘留，
+超過 2 GB 就拒絕；另外請在 R2 bucket 設生命週期規則「flash/ 1 天後刪除」當第二層保險。
 
 限制：圖片下載後 ≤8 MB（轉 JPEG、長邊 ≤2048）；影片 MP4／MOV、≤300 MB（Threads 上限 1 GB、5 分鐘，
 FB 用 file_url 也收 MP4）。只用標準函式庫下載；轉圖要 Pillow（workflow 會 pip install pillow pillow-avif-plugin），
@@ -135,8 +137,29 @@ def _r2():
     )
 
 
+R2_LINGER_LIMIT = 2 * 1024 * 1024 * 1024   # flash/ 底下殘留超過 2 GB 就不再上傳（刪檔一直失敗時的停損；免費額度 10 GB-月）
+
+
+def r2_usage(prefix: str = "flash/") -> tuple[int, int]:
+    """回傳 (物件數, 總位元組)。一次 ListObjects 是 1 次 Class A 操作。"""
+    client = _r2(); n = total = 0; token = None
+    while True:
+        kw = {"Bucket": os.environ["R2_BUCKET"], "Prefix": prefix, "MaxKeys": 1000}
+        if token:
+            kw["ContinuationToken"] = token
+        r = client.list_objects_v2(**kw)
+        for o in r.get("Contents", []):
+            n += 1; total += int(o.get("Size", 0))
+        if not r.get("IsTruncated"):
+            return n, total
+        token = r.get("NextContinuationToken")
+
+
 def r2_put(key: str, path: Path, content_type: str) -> str:
-    """上傳一個檔案到 R2，回傳公開網址。"""
+    """上傳一個檔案到 R2，回傳公開網址。上傳前先看殘留量：超過 R2_LINGER_LIMIT 就拒絕（避免刪檔失敗時無限堆積、超出免費額度）。"""
+    n, total = r2_usage()
+    if total + path.stat().st_size > R2_LINGER_LIMIT:
+        raise c.ApiError(f"R2 的 flash/ 還殘留 {n} 個檔、{total / 1048576:.0f} MB（上限 2 GB），停止上傳；請到 R2 後台清掉舊檔（正常應該發完就刪，殘留代表刪檔一直失敗）")
     _r2().upload_file(str(path), os.environ["R2_BUCKET"], key, ExtraArgs={"ContentType": content_type})
     return f"{os.environ['R2_PUBLIC_BASE'].rstrip('/')}/{key}"
 

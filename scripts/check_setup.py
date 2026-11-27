@@ -121,6 +121,17 @@ if S["THREADS_TOKEN"]:
         else:
             report(False, "Threads 回覆權限", "缺 threads_manage_replies：請在 Meta 應用程式的 Threads 使用案例加這個權限，重跑 setup_tokens.py threads 換權杖（" + err(b) + "）")
 
+# ---- Cloudflare R2（速報影片網址用；沒設就只提示，不算失敗） ----
+import media as _m
+if _m.r2_enabled():
+    try:
+        n, total = _m.r2_usage()
+        report(total < _m.R2_LINGER_LIMIT, "R2 殘留", f"flash/ 有 {n} 個檔、{total / 1048576:.0f} MB（正常應接近 0；上限 2 GB 會停止上傳）")
+    except Exception as e:
+        report(False, "R2 連線", f"讀不到 bucket：{str(e)[:120]}")
+else:
+    report(None, "R2", "沒有設定（影片網址那則會發佈失敗；圖片網址照常）")
+
 # ---- GitHub 金鑰 ----
 if S["PUBLISH_GH_TOKEN"]:
     h = {"Authorization": f"Bearer {S['PUBLISH_GH_TOKEN']}", "Accept": "application/vnd.github+json",
