@@ -1,37 +1,45 @@
 {
- "rev": 29,
+ "rev": 30,
  "items": [
   {
    "id": "2026-11-27-1e4eea257064",
    "at": "2026-11-27T19:22:00+08:00",
-   "status": "scheduled",
+   "status": "publishing",
    "title": "速報 DIGITAL-003 重試（補回覆）",
    "kind": "flash",
-   "force": true
+   "force": true,
+   "prev_status": "scheduled",
+   "dispatched_at": "2026-11-27T19:22:04+08:00"
   },
   {
    "id": "2026-11-27-974004bc5887",
    "at": "2026-11-27T19:22:00+08:00",
-   "status": "scheduled",
+   "status": "publishing",
    "title": "速報 AI-001 重試（補回覆）",
    "kind": "flash",
-   "force": true
+   "force": true,
+   "prev_status": "scheduled",
+   "dispatched_at": "2026-11-27T19:22:04+08:00"
   },
   {
    "id": "2026-11-27-2c026472a115",
    "at": "2026-11-27T19:22:00+08:00",
-   "status": "scheduled",
+   "status": "publishing",
    "title": "速報 BRAND-001 重試（補回覆）",
    "kind": "flash",
-   "force": true
+   "force": true,
+   "prev_status": "scheduled",
+   "dispatched_at": "2026-11-27T19:22:04+08:00"
   },
   {
    "id": "2026-11-27-5d0c8843c899",
    "at": "2026-11-27T19:22:00+08:00",
-   "status": "scheduled",
+   "status": "publishing",
    "title": "速報 BRAND-002 重試（補回覆）",
    "kind": "flash",
-   "force": true
+   "force": true,
+   "prev_status": "scheduled",
+   "dispatched_at": "2026-11-27T19:22:04+08:00"
   },
   {
    "id": "2026-11-27-8a5e5b524395",
@@ -55,5 +63,5 @@
    "kind": "flash"
   }
  ],
- "updated_at": "2026-11-27T19:19:03+08:00"
+ "updated_at": "2026-11-27T19:22:04+08:00"
 }
