@@ -1,5 +1,5 @@
 {
- "rev": 12,
+ "rev": 13,
  "items": [
   {
    "id": "2026-11-27-1e4eea257064",
@@ -49,7 +49,14 @@
    "status": "scheduled",
    "title": "速報 AI-003 Perplexity Time Machine：讓 AI 代理人「照過去那天的網頁」查資料",
    "kind": "flash"
+  },
+  {
+   "id": "2026-11-27-85b4cb5d0781",
+   "at": "2026-11-27T21:10:00+08:00",
+   "status": "scheduled",
+   "title": "速報 SEO-001 黑五 AI 購物答案改引用「最佳清單」文，品牌官網幾乎沒份",
+   "kind": "flash"
   }
  ],
- "updated_at": "2026-11-27T15:40:06+08:00"
+ "updated_at": "2026-11-27T15:45:33+08:00"
 }
