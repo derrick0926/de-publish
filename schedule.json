@@ -1,12 +1,14 @@
 {
- "rev": 36,
+ "rev": 37,
  "items": [
   {
    "id": "2026-11-27-e0c1be8a37c7",
    "at": "2026-11-27T20:30:00+08:00",
-   "status": "scheduled",
+   "status": "publishing",
    "title": "速報 AI-003 Perplexity Time Machine：讓 AI 代理人「照過去那天的網頁」查資料",
-   "kind": "flash"
+   "kind": "flash",
+   "prev_status": "scheduled",
+   "dispatched_at": "2026-11-27T20:30:04+08:00"
   },
   {
    "id": "2026-11-27-85b4cb5d0781",
@@ -16,5 +18,5 @@
    "kind": "flash"
   }
  ],
- "updated_at": "2026-11-27T19:41:11+08:00"
+ "updated_at": "2026-11-27T20:30:04+08:00"
 }
