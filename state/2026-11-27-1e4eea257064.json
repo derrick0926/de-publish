@@ -1,13 +1,16 @@
 {
  "id": "2026-11-27-1e4eea257064",
- "done": {},
+ "done": {
+  "threads": "18104557496397938"
+ },
  "errors": {
-  "threads": "The media with id 17919405456500559 cannot be found.（code 24）",
   "threads_reply": "前一則 Threads 沒發成功，回覆跳過"
  },
- "links": {},
+ "links": {
+  "threads": "https://www.threads.com/@de.marketing_archive/post/DgPRrYlG9iV"
+ },
  "scheduled_at": "2026-11-27T16:15:00+08:00",
- "updated_at": "2026-11-27T16:15:28+08:00",
+ "updated_at": "2026-11-27T16:43:00+08:00",
  "result": "failed",
  "finished_at": "2026-11-27T16:15:28+08:00"
 }
