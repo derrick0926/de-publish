@@ -10,9 +10,10 @@ DE 行銷解碼的排程發文（FB、IG、Threads）。這是公開 repo：Acti
 |---|---|
 | `schedule.json` | 排程表：只有 id、時間、狀態（`scheduled` 已確認、`preview` 預覽待確認、`publishing` 發佈中）與 `kind`（`material` 一般素材、`flash` 單則速報、`digest` 速報集錦；沒寫視為 material）。由發文助手寫入。 |
 | `state/<todo id>.json` | 每則的發佈結果：各平台貼文 id、連結、錯誤。重跑時已發的平台跳過。 |
-| `tmp/<todo id>/` | IG 與速報 Threads 圖的暫放處（要公開網址），發完就刪。 |
+| `tmp/<todo id>/` | IG 與速報 Threads 圖的暫放處（要公開網址），發完就刪。影片不放這裡（放 R2），避免公開 repo 的 git 歷史膨脹。 |
+| `scripts/media.py` | 網址媒體：下載、辨識格式、圖轉 JPEG（Pillow）、上傳／刪除 Cloudflare R2（boto3）。R2 的 5 個 Secret：`R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET`、`R2_PUBLIC_BASE`（bucket 公開網址，結尾不加斜線）；都設了才啟用。 |
 | `.github/workflows/alarm.yml` | 鬧鐘：睡到最早一則，時間到啟動 publish.yml；每段最多 5 小時 45 分，接力叫醒下一段。 |
-| `.github/workflows/publish.yml` | 發佈：FB 多圖 → 粉專留言 vocus 連結 → IG 輪播 → Threads 主文 → Threads 第一則回覆（CTA＋vocus 連結，2026-11-27 起）。速報（2026-11-27 起）：`post.json` 的 `threads.posts[]` 第一則是主文、其餘依序串成回覆（每則掛在前一則底下，最後一則是原文連結）；`platforms` 列了 fb 才發 FB，圖空的就發純文字貼文；不發 IG。速報帶圖（2026-11-27 起）：`threads.images`／`fb.images` 的圖（JPEG／PNG，≤10 張）全掛主文——1 張單圖、2 張以上輪播——回覆串維持純文字。 |
+| `.github/workflows/publish.yml` | 發佈：FB 多圖 → 粉專留言 vocus 連結 → IG 輪播 → Threads 主文 → Threads 第一則回覆（CTA＋vocus 連結，2026-11-27 起）。速報（2026-11-27 起）：`post.json` 的 `threads.posts[]` 第一則是主文、其餘依序串成回覆（每則掛在前一則底下，最後一則是原文連結）；`platforms` 列了 fb 才發 FB，圖空的就發純文字貼文；不發 IG。速報帶媒體（2026-11-27 起）：`threads.media`／`fb.media`（上傳圖、圖片網址、影片網址，≤10 個）全掛主文——1 個單則、2 個以上輪播（可混圖與影片）——回覆串維持純文字；網址媒體由 `scripts/media.py` 發文前一刻下載（圖轉 JPEG 放 tmp/ 或 R2，影片一定放 Cloudflare R2），發完刪。FB 只能單支影片或純圖。 |
 | `.github/workflows/patrol.yml` | 每小時巡檢：鬧鐘斷了就重設、到時間沒發的就補發。 |
 | `.github/workflows/threads-refresh.yml` | Threads 權杖每 10 天更新，寫回 Secret。 |
 | `.github/workflows/check-setup.yml` | 只讀設定檢查；每週一自動跑，有問題或粉專資料存取期限 21 天內到期時通知 PM。 |

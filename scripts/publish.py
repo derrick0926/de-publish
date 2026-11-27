@@ -11,8 +11,12 @@
    "threads": {"text", "reply"}}   # reply（2026-11-27 起）：第一則回覆，放 CTA 與 vocus 連結；沒有就不發回覆
 速報（2026-11-27 起，kind=flash／digest）：
   {"id", "kind", "code", "title", "platforms": ["threads", …],
-   "threads": {"posts": ["主文", "回覆 1", "回覆 2", …], "images": ["01.jpg", …]},   # 第一則主文（圖全掛這則：1 張單圖、2–10 張輪播），其餘依序串成純文字回覆
-   "fb": {"message", "images": ["01.jpg", …], "comment"}}   # 圖空的就發純文字貼文；沒列在 platforms 的平台不發；圖可以是 JPEG 或 PNG（2026-11-27 起）
+   "threads": {"posts": ["主文", "回覆 1", "回覆 2", …], "images": ["01.jpg", …],   # 第一則主文（媒體全掛這則：1 個單則、2–10 個輪播），其餘依序串成純文字回覆
+               "media": [{"type": "image", "file": "01.jpg"}, {"type": "image", "url": "https://…"}, {"type": "video", "url": "https://….mp4"}]},
+   "fb": {"message", "images": ["01.jpg", …], "media": [同上], "comment"}}
+   # images 是舊欄位（只有上傳的檔）；media 是 2026-11-27 起的完整清單（含網址圖、網址影片，照順序）。兩者都沒有就發純文字。
+   # 網址媒體由 scripts/media.py 在發文前一刻下載：圖轉 JPEG 放 tmp/（有 R2 放 R2），影片一定放 R2；發完刪。
+   # FB：只有圖 → 多圖貼文；只有 1 支影片 → 影片貼文（file_url）；影片＋圖或多支影片 → 這則 FB 失敗（Threads 照發）。
 
 不重發：每個平台發完立刻寫 state/<id>.json 並 push；重跑時已發的平台跳過（例：FB 已發、IG 失敗，重跑只補 IG）。
 圖片順序：FB 照 fb.images、IG 照 ig.images 的順序上傳與組輪播（貼文包產生時已依圖卡編號排好並檢查過）。
@@ -25,6 +29,7 @@ import sys
 import time
 
 import common as c
+import media as m
 
 PLATFORMS = ("fb_post", "fb_comment", "ig", "threads", "threads_reply")
 _LABEL = {"fb_post": "FB 貼文", "fb_comment": "FB 留言", "ig": "IG", "threads": "Threads", "threads_reply": "Threads 回覆"}
@@ -76,7 +81,8 @@ def fetch_package(todo_id: str) -> tuple[dict, dict[str, bytes]]:
         raise c.ApiError(f"私人 repo 找不到 publish/{todo_id}/post.json")
     post = json.loads(c.gh("GET", base + "/post.json?ref=main", raw=True))
     want = set((post.get("fb") or {}).get("images", [])) | set((post.get("ig") or {}).get("images", [])) \
-        | set((post.get("threads") or {}).get("images", []))
+        | set((post.get("threads") or {}).get("images", [])) \
+        | {x["file"] for p in ("threads", "fb") for x in ((post.get(p) or {}).get("media") or []) if x.get("file")}
     missing = want - names
     if missing:
         raise c.ApiError(f"缺圖：{', '.join(sorted(missing))}")
@@ -91,15 +97,111 @@ def mime(b: bytes) -> str:
     return "image/png" if b.startswith(b"\x89PNG") else "image/jpeg"
 
 
+# ---------- 媒體清單（上傳的檔＋網址圖＋網址影片） ----------
+def media_of(post, platform: str) -> list[dict]:
+    """統一成 [{"type": "image"|"video", "file": 檔名} 或 {"type", "url"}]。沒有 media 欄位時用舊的 images。"""
+    sec = post.get(platform) or {}
+    if sec.get("media"):
+        return [x for x in sec["media"] if isinstance(x, dict) and (x.get("file") or x.get("url"))]
+    return [{"type": "image", "file": n} for n in (sec.get("images") or [])]
+
+
+class Resolved:
+    """發文用的公開網址清單，以及發完要刪的東西。"""
+    def __init__(self):
+        self.items: list[tuple[str, str]] = []   # (type, public_url)
+        self.r2_keys: list[str] = []
+        self.staged = False
+        self.tmpdir: "Path | None" = None
+
+    def cleanup(self, todo_id: str):
+        if self.staged:
+            unstage_images(todo_id)
+        m.r2_delete(self.r2_keys)
+        if self.tmpdir:
+            m.cleanup_dir(self.tmpdir)
+
+
+def resolve_media(todo_id: str, media: list[dict], files: dict[str, bytes]) -> Resolved:
+    """把媒體清單變成公開網址：上傳的檔放 tmp/；網址圖下載轉 JPEG（有 R2 放 R2，沒有放 tmp/）；網址影片下載後放 R2。"""
+    from pathlib import Path
+    res = Resolved()
+    if not media:
+        return res
+    if len(media) > 10:
+        raise c.ApiError(f"媒體 {len(media)} 個，超過 10 個")
+    videos = [x for x in media if x.get("type") == "video"]
+    if videos and not m.r2_enabled():
+        raise c.ApiError("有影片網址但沒有設定 Cloudflare R2（R2_ACCOUNT_ID／ACCESS_KEY／SECRET／BUCKET／PUBLIC_BASE）")
+    work = Path(c.ROOT) / "work" / todo_id
+    res.tmpdir = work
+    stage_names: list[str] = []
+    stage_files: dict[str, bytes] = {}
+    plan: list[tuple[str, str | None, str | None]] = []   # (type, tmp 檔名, 直接網址)
+    for n, x in enumerate(media, 1):
+        kind = "video" if x.get("type") == "video" else "image"
+        if x.get("file"):
+            if kind == "video":
+                raise c.ApiError("上傳的影片檔還不支援，影片請貼網址")
+            stage_names.append(x["file"]); stage_files[x["file"]] = files[x["file"]]
+            plan.append(("image", x["file"], None))
+            continue
+        src, ext = m.download(x["url"], work / f"{n:02d}", kind)
+        if kind == "image":
+            jpg = m.to_jpeg(src, work / f"{n:02d}" / f"{n:02d}.jpg")
+            if m.r2_enabled():
+                key = f"flash/{todo_id}/{n:02d}.jpg"
+                plan.append(("image", None, m.r2_put(key, jpg, "image/jpeg"))); res.r2_keys.append(key)
+            else:
+                name = f"url-{n:02d}.jpg"
+                stage_names.append(name); stage_files[name] = jpg.read_bytes()
+                plan.append(("image", name, None))
+        else:
+            key = f"flash/{todo_id}/{n:02d}.{ext}"
+            plan.append(("video", None, m.r2_put(key, src, "video/quicktime" if ext == "mov" else "video/mp4"))); res.r2_keys.append(key)
+    urls: dict[str, str] = {}
+    if stage_names:
+        for name, u in zip(stage_names, stage_images(todo_id, stage_names, stage_files)):
+            urls[name] = u
+        res.staged = True
+    res.items = [(kind, direct or urls[name]) for kind, name, direct in plan]
+    return res
+
+
 # ---------- 各平台 ----------
 def fb_post(post, files) -> str:
     page, tok = c.env("META_PAGE_ID"), c.env("META_PAGE_TOKEN")
+    media = media_of(post, "fb")
+    videos = [x for x in media if x.get("type") == "video"]
+    msg = keep_blank_lines(post["fb"]["message"])
+    if videos:
+        if len(media) != 1:
+            raise c.ApiError("FB 一則貼文只能發 1 支影片、不能和圖片混發；請改成只有一支影片，或 FB 不勾")
+        tid = post.get("id", "")
+        res = resolve_media(f"{tid}-fb", media, files)
+        try:
+            _, url = res.items[0]
+            r = c.meta("POST", f"{c.GRAPH}/{page}/videos", data={"file_url": url, "description": msg, "access_token": tok})
+            return r["id"]
+        finally:
+            res.cleanup(f"{tid}-fb")
     ids = []
-    for n in post["fb"].get("images") or []:
-        r = c.meta("POST", f"{c.GRAPH}/{page}/photos", data={"published": "false", "access_token": tok},
-                   files={"source": (n, files[n], mime(files[n]))})
-        ids.append(r["id"])
-    data = {"message": keep_blank_lines(post["fb"]["message"]), "access_token": tok}
+    externals = [x for x in media if x.get("url")]
+    res = resolve_media(f"{post.get('id', '')}-fb", externals, files) if externals else None
+    try:
+        ext_iter = iter(res.items if res else [])
+        for x in media:
+            if x.get("file"):
+                r = c.meta("POST", f"{c.GRAPH}/{page}/photos", data={"published": "false", "access_token": tok},
+                           files={"source": (x["file"], files[x["file"]], mime(files[x["file"]]))})
+            else:
+                _, u = next(ext_iter)
+                r = c.meta("POST", f"{c.GRAPH}/{page}/photos", data={"published": "false", "url": u, "access_token": tok})
+            ids.append(r["id"])
+    finally:
+        if res:
+            res.cleanup(f"{post.get('id', '')}-fb")
+    data = {"message": msg, "access_token": tok}
     for k, i in enumerate(ids):   # 沒圖（速報）就只有文字
         data[f"attached_media[{k}]"] = '{"media_fbid":"%s"}' % i
     return c.meta("POST", f"{c.GRAPH}/{page}/feed", data=data)["id"]
@@ -182,36 +284,41 @@ def threads_text(text: str, reply_to: str = "") -> str:
     return c.meta("POST", f"{c.THREADS}/{uid}/threads_publish", data={"creation_id": cid, "access_token": tok})["id"]
 
 
-def threads_image(text: str, urls: list[str]) -> str:
-    """發一則帶圖的 Threads 主文：1 張單圖、2–10 張輪播（速報的圖全掛主文，回覆仍是純文字）。"""
+def _th_item(kind: str, url: str) -> dict:
+    return {"media_type": "VIDEO", "video_url": url} if kind == "video" else {"media_type": "IMAGE", "image_url": url}
+
+
+def threads_media(text: str, items: list[tuple[str, str]]) -> str:
+    """發一則帶媒體的 Threads 主文：1 個＝單圖或單支影片，2–10 個＝輪播（可混圖與影片）。回覆仍是純文字。
+    影片要等平台轉檔，等待上限放寬到 10 分鐘。"""
     uid, tok = c.env("THREADS_USER_ID"), c.env("THREADS_TOKEN")
     text = keep_blank_lines(text)
     if len(text) > 500:
         raise c.ApiError(f"Threads 超過 500 字（{len(text)}）")
-    if len(urls) == 1:
-        cid = c.meta("POST", f"{c.THREADS}/{uid}/threads", data={"media_type": "IMAGE", "image_url": urls[0], "text": text, "access_token": tok})["id"]
+    has_video = any(k == "video" for k, _ in items)
+    if len(items) == 1:
+        kind, url = items[0]
+        cid = c.meta("POST", f"{c.THREADS}/{uid}/threads", data={**_th_item(kind, url), "text": text, "access_token": tok})["id"]
     else:
         kids = []
-        for u in urls:
-            k = c.meta("POST", f"{c.THREADS}/{uid}/threads", data={"media_type": "IMAGE", "image_url": u, "is_carousel_item": "true", "access_token": tok})["id"]
-            wait_ready(c.THREADS, k, tok, "status", "FINISHED", limit=120)
+        for kind, url in items:
+            k = c.meta("POST", f"{c.THREADS}/{uid}/threads", data={**_th_item(kind, url), "is_carousel_item": "true", "access_token": tok})["id"]
+            wait_ready(c.THREADS, k, tok, "status", "FINISHED", limit=600 if kind == "video" else 120)
             kids.append(k)
         cid = c.meta("POST", f"{c.THREADS}/{uid}/threads", data={"media_type": "CAROUSEL", "children": ",".join(kids), "text": text, "access_token": tok})["id"]
-    wait_ready(c.THREADS, cid, tok, "status", "FINISHED", limit=180)
+    wait_ready(c.THREADS, cid, tok, "status", "FINISHED", limit=600 if has_video else 180)
     return c.meta("POST", f"{c.THREADS}/{uid}/threads_publish", data={"creation_id": cid, "access_token": tok})["id"]
 
 
 def threads_post(post, files=None, todo_id: str = "") -> str:
-    names = (post.get("threads") or {}).get("images") or []
-    if not names:
+    media = media_of(post, "threads")
+    if not media:
         return threads_text(threads_posts(post)[0])
-    if len(names) > 10:
-        raise c.ApiError(f"Threads 圖片 {len(names)} 張，超過 10 張")
-    urls = stage_images(todo_id, names, files or {})
+    res = resolve_media(todo_id, media, files or {})
     try:
-        return threads_image(threads_posts(post)[0], urls)
+        return threads_media(threads_posts(post)[0], res.items)
     finally:
-        unstage_images(todo_id)
+        res.cleanup(todo_id)
 
 
 def threads_reply(post, parent_id: str, n: int = 1) -> str:
@@ -221,7 +328,8 @@ def threads_reply(post, parent_id: str, n: int = 1) -> str:
 def permalink(kind: str, pid: str) -> str:
     try:
         if kind == "fb_post":
-            return c.meta("GET", f"{c.GRAPH}/{pid}", params={"fields": "permalink_url", "access_token": c.env("META_PAGE_TOKEN")}).get("permalink_url", "")
+            p = c.meta("GET", f"{c.GRAPH}/{pid}", params={"fields": "permalink_url", "access_token": c.env("META_PAGE_TOKEN")}).get("permalink_url", "")
+            return p if not p or p.startswith("http") else "https://www.facebook.com" + p   # 影片貼文回的是相對路徑
         if kind == "ig":
             return c.meta("GET", f"{c.GRAPH}/{pid}", params={"fields": "permalink", "access_token": c.env("META_PAGE_TOKEN")}).get("permalink", "")
         if kind == "threads":

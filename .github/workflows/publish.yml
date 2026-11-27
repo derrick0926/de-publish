@@ -23,6 +23,8 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      - name: 安裝媒體工具（網址圖轉 JPEG、影片上傳 R2；2026-11-27 起）
+        run: pip install -q pillow pillow-avif-plugin boto3
       - name: 發佈
         env:
           META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
@@ -31,6 +33,12 @@ jobs:
           THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
           THREADS_TOKEN: ${{ secrets.THREADS_TOKEN }}
           PUBLISH_GH_TOKEN: ${{ secrets.PUBLISH_GH_TOKEN }}
+          # Cloudflare R2（影片網址一定要；圖片網址有就放 R2、沒有放 tmp/）。五個都設才啟用。
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_PUBLIC_BASE: ${{ secrets.R2_PUBLIC_BASE }}
           IDS: ${{ inputs.ids }}
           FORCE: ${{ inputs.force }}
         run: python3 scripts/publish.py --ids "$IDS" $([ "$FORCE" = "true" ] && echo --force)

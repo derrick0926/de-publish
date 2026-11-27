@@ -15,6 +15,7 @@ os.environ.update({"DRY_GIT": "1", "META_PAGE_ID": "P", "META_PAGE_TOKEN": "tokP
 import common as c
 import alarm
 import publish
+import media as m
 
 c.time.sleep = lambda *_: None
 publish.time.sleep = lambda *_: None
@@ -64,22 +65,33 @@ class Fake:
                 self.fail.discard(key)
                 return 400, {"error": {"message": f"假錯誤 {key}", "code": 9}}
         if u.endswith("/P/photos"):
-            assert files and files["source"][1] in (JPG, PNG)
-            assert files["source"][2] == ("image/png" if files["source"][1] == PNG else "image/jpeg"), "PNG 要用 image/png 上傳"
-            self.photos.append(f"ph{self.n}"); self.uploaded.append(files["source"][0])
+            if files:
+                assert files["source"][1] in (JPG, PNG)
+                assert files["source"][2] == ("image/png" if files["source"][1] == PNG else "image/jpeg"), "PNG 要用 image/png 上傳"
+                self.uploaded.append(files["source"][0])
+            else:
+                assert body.get("url", "").startswith("http"), "網址圖用 url 參數"
+                self.uploaded.append("url:" + body["url"].rsplit("/", 1)[-1])
+            self.photos.append(f"ph{self.n}")
             return 200, {"id": f"ph{self.n}"}
-        if u.endswith("/P/feed") and not POST["fb"].get("images"):
+        if u.endswith("/P/videos"):
+            assert body["file_url"].startswith("https://cdn.test/") and body.get("description")
+            self.fb_video = body["file_url"]
+            return 200, {"id": "P_vid1"}
+        if u.endswith("/P_vid1") and method == "GET":
+            return 200, {"permalink_url": "/DE/videos/1/"}
+        if u.endswith("/P/feed") and not POST["fb"].get("images") and not POST["fb"].get("media"):
             assert "attached_media[0]" not in body, "純文字貼文不附圖"
             self.fb_text = body["message"]
             return 200, {"id": "P_post1"}
         if u.endswith("/P/feed"):
-            n_img = len(POST["fb"]["images"])
+            n_img = len(POST["fb"].get("images") or POST["fb"].get("media") or [])
             assert body[f"attached_media[{n_img - 1}]"].startswith('{"media_fbid"') and f"attached_media[{n_img}]" not in body
             if n_img == 2:
                 assert body["message"] == "第一段\n\u3000\n第二段", repr(body["message"])
             assert [body[f"attached_media[{k}]"] for k in range(n_img)] == ['{"media_fbid":"%s"}' % i for i in self.photos], "照順序附圖"
             return 200, {"id": "P_post1"}
-        if u.endswith("/P_post1/comments"):
+        if u.endswith("/P_post1/comments") or u.endswith("/P_vid1/comments"):
             return 200, {"id": "cm1"}
         if u.endswith("/IG/media"):
             if body.get("is_carousel_item"):
@@ -92,8 +104,9 @@ class Fake:
         if u.endswith("/T/threads") and (body.get("is_carousel_item") or body.get("media_type") == "CAROUSEL"):
             # 速報帶圖：輪播子項不算一則貼文
             if body.get("is_carousel_item"):
-                assert body["media_type"] == "IMAGE" and "text" not in body
-                self.th_kids = getattr(self, "th_kids", []) + [(f"tk{self.n}", body["image_url"].rsplit("/", 1)[-1])]
+                assert body["media_type"] in ("IMAGE", "VIDEO") and "text" not in body
+                src = body.get("image_url") or body.get("video_url")
+                self.th_kids = getattr(self, "th_kids", []) + [(f"tk{self.n}", (body["media_type"] + ":" if body["media_type"] == "VIDEO" else "") + src.rsplit("/", 1)[-1])]
                 return 200, {"id": f"tk{self.n}"}
             assert body["children"] == ",".join(k for k, _ in self.th_kids), "Threads 輪播照順序"
             self.th_n = getattr(self, "th_n", 0) + 1
@@ -106,6 +119,9 @@ class Fake:
             if body.get("media_type") == "IMAGE":
                 assert not body.get("reply_to_id"), "回覆串維持純文字"
                 self.th_media = "image:" + body["image_url"].rsplit("/", 1)[-1]
+            elif body.get("media_type") == "VIDEO":
+                assert not body.get("reply_to_id")
+                self.th_media = "video:" + body["video_url"].rsplit("/", 1)[-1]
             else:
                 assert body["media_type"] == "TEXT"
             if body.get("reply_to_id"):
@@ -267,6 +283,93 @@ def test_flash_single_image_and_fb():
         assert f.th_media == "image:01.png"
         assert f.uploaded == ["01.png"]
     _with_post(FLASH_ONE, go)
+
+
+# ── 網址圖／網址影片（scripts/media.py，2026-11-27）：下載與 R2 用假的 ──
+class FakeMedia:
+    def __init__(self, r2=True):
+        self.r2 = r2; self.put = []; self.deleted = []; self.downloaded = []
+    def install(self):
+        import pathlib
+        def download(url, dest, expect):
+            self.downloaded.append((url, expect))
+            if "404" in url: raise c.ApiError(f"媒體網址下載失敗（HTTP 404）：{url}")
+            if expect == "image" and url.endswith(".mp4"): raise c.ApiError("網址抓到的不是圖片（video）")
+            pathlib.Path(dest).mkdir(parents=True, exist_ok=True)
+            ext = "mp4" if expect == "video" else "png"
+            f = pathlib.Path(dest) / f"source.{ext}"; f.write_bytes(b"fake"); return f, ext
+        def to_jpeg(src, dst):
+            pathlib.Path(dst).write_bytes(JPG); return pathlib.Path(dst)
+        def r2_put(key, path, ctype):
+            self.put.append((key, ctype)); return "https://cdn.test/" + key
+        m.download, m.to_jpeg, m.r2_put = download, to_jpeg, r2_put
+        m.r2_delete = lambda keys: self.deleted.extend(keys)
+        m.r2_enabled = lambda: self.r2
+        return self
+
+
+FLASH_URLS = {**FLASH, "threads": {**FLASH["threads"], "media": [{"type": "image", "file": "01.jpg"}, {"type": "image", "url": "https://pic.test/a.webp"}, {"type": "video", "url": "https://vid.test/b.mp4"}], "images": ["01.jpg"]}}
+FLASH_VID = {**FLASH, "platforms": ["threads", "fb"], "threads": {**FLASH["threads"], "media": [{"type": "video", "url": "https://vid.test/only.mp4"}]},
+             "fb": {"message": "▞ 標題 ▚\n\n故事", "media": [{"type": "video", "url": "https://vid.test/only.mp4"}], "comment": "原文（SEJ）：https://x/"}}
+FLASH_URLIMG_NOR2 = {**FLASH, "platforms": ["threads", "fb"], "threads": {**FLASH["threads"], "media": [{"type": "image", "url": "https://pic.test/c.avif"}]},
+                     "fb": {"message": "文", "media": [{"type": "image", "url": "https://pic.test/c.avif"}], "comment": ""}}
+
+
+def test_media_mixed_carousel_with_r2():
+    """上傳圖＋網址圖＋網址影片：Threads 輪播照順序（圖→R2 的 JPEG→R2 的影片），發完 R2 與 tmp/ 都清掉。"""
+    def go():
+        setup([{**item(2), "kind": "flash"}])
+        fm = FakeMedia(r2=True).install(); f = Fake(); c.http = f
+        assert publish.main([]) == 0
+        assert f.th_media == "carousel" and [n for _, n in f.th_kids] == ["01.jpg", "02.jpg", "VIDEO:03.mp4"], f.th_kids
+        assert [k for k, _ in fm.put] == ["flash/abc123/02.jpg", "flash/abc123/03.mp4"] and fm.deleted == ["flash/abc123/02.jpg", "flash/abc123/03.mp4"]
+        assert fm.downloaded == [("https://pic.test/a.webp", "image"), ("https://vid.test/b.mp4", "video")]
+        assert not (c.ROOT / "tmp" / "abc123").exists() and not (c.ROOT / "work" / "abc123").exists()
+    _with_post(FLASH_URLS, go)
+
+
+def test_media_video_threads_and_fb():
+    """單支網址影片：Threads 單支影片主文、FB 影片貼文（file_url）。"""
+    def go():
+        setup([{**item(2), "kind": "flash"}])
+        fm = FakeMedia(r2=True).install(); f = Fake(); c.http = f
+        assert publish.main([]) == 0
+        st = json.loads((c.STATE / "abc123.json").read_text())
+        assert f.th_media == "video:01.mp4" and f.fb_video.endswith("/01.mp4") and st["done"]["fb_post"] == "P_vid1"
+        assert st["links"]["fb_post"].startswith("https://www.facebook.com/")
+    _with_post(FLASH_VID, go)
+
+
+def test_media_url_image_without_r2_uses_tmp():
+    """沒設 R2：網址圖轉 JPEG 後放公開 repo 的 tmp/，Threads 與 FB 都用那個網址。"""
+    def go():
+        setup([{**item(2), "kind": "flash"}])
+        fm = FakeMedia(r2=False).install(); f = Fake(); c.http = f
+        assert publish.main([]) == 0
+        assert f.th_media == "image:url-01.jpg" and f.uploaded == ["url:url-01.jpg"] and not fm.put
+    _with_post(FLASH_URLIMG_NOR2, go)
+
+
+def test_media_video_without_r2_fails_clearly():
+    """沒設 R2 卻有影片網址：Threads 那則失敗、原因寫明，不會發出少了影片的主文。"""
+    def go():
+        setup([{**item(2), "kind": "flash"}])
+        FakeMedia(r2=False).install(); f = Fake(); c.http = f
+        assert publish.main([]) == 1
+        st = json.loads((c.STATE / "abc123.json").read_text())
+        assert "R2" in st["errors"]["threads"] and "threads" not in st["done"]
+        assert f.events[-1]["type"] == "publish_failed"
+    _with_post({**FLASH_VID, "platforms": ["threads"]}, go)
+
+
+def test_media_download_404_fails():
+    def go():
+        setup([{**item(2), "kind": "flash"}])
+        FakeMedia(r2=True).install(); f = Fake(); c.http = f
+        assert publish.main([]) == 1
+        st = json.loads((c.STATE / "abc123.json").read_text())
+        assert "404" in st["errors"]["threads"]
+    _with_post({**FLASH, "threads": {**FLASH["threads"], "media": [{"type": "image", "url": "https://pic.test/404.png"}]}}, go)
 
 
 def test_not_due_untouched():
