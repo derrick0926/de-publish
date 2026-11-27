@@ -396,7 +396,7 @@ def test_retry_via_schedule_force():
         assert publish.main([]) == 0
         st = json.loads((c.STATE / "abc123.json").read_text())
         assert st["result"] == "done" and st["done"]["threads"] == "th0" and "threads_reply" in st["done"]
-        assert len(f.th_texts) == 1, "只補回覆，主文不重發"
+        assert FLASH["threads"]["posts"][0] not in f.th_texts and len(f.th_texts) == 2, "只補兩則回覆，主文不重發"
     _with_post(FLASH, go)
 
 
