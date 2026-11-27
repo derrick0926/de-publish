@@ -1,5 +1,5 @@
 {
- "rev": 46,
+ "rev": 47,
  "items": [
   {
    "id": "c523b5468a3f",
@@ -11,10 +11,10 @@
   {
    "id": "ca4a0d0788ba",
    "at": "2026-11-29T20:00:00+08:00",
-   "status": "preview",
+   "status": "scheduled",
    "title": "CASE-005 Heineken〈Pub Succession〉是史上最成功的失敗廣告嗎？",
    "kind": "material"
   }
  ],
- "updated_at": "2026-11-27T22:55:13+08:00"
+ "updated_at": "2026-11-27T23:03:05+08:00"
 }
