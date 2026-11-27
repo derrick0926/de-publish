@@ -1,16 +1,15 @@
 {
  "id": "2026-11-27-1e4eea257064",
  "done": {
-  "threads": "18104557496397938"
+  "threads": "18104557496397938",
+  "threads_reply": "18141187468657593"
  },
- "errors": {
-  "threads_reply": "Application does not have permission for this action（code 10）"
- },
+ "errors": {},
  "links": {
   "threads": "https://www.threads.com/@de.marketing_archive/post/DgPRrYlG9iV"
  },
  "scheduled_at": "2026-11-27T16:15:00+08:00",
- "updated_at": "2026-11-27T16:43:04+08:00",
+ "updated_at": "2026-11-27T19:22:26+08:00",
  "result": "failed",
  "finished_at": "2026-11-27T16:43:04+08:00"
 }
