@@ -1,15 +1,6 @@
 {
- "rev": 58,
+ "rev": 59,
  "items": [
-  {
-   "id": "2026-11-28-c8586678d91c",
-   "at": "2026-11-28T14:00:00+08:00",
-   "status": "publishing",
-   "title": "速報 SEASON-001 IKEA 丹麥黑五不打折：「Black Deals」只賣黑色商品，價格跟平常一樣",
-   "kind": "flash",
-   "prev_status": "scheduled",
-   "dispatched_at": "2026-11-28T14:00:05+08:00"
-  },
   {
    "id": "2026-11-28-5b78d56a8458",
    "at": "2026-11-28T18:30:00+08:00",
@@ -39,5 +30,5 @@
    "kind": "material"
   }
  ],
- "updated_at": "2026-11-28T14:00:05+08:00"
+ "updated_at": "2026-11-28T14:01:54+08:00"
 }
