@@ -1,12 +1,14 @@
 {
- "rev": 55,
+ "rev": 56,
  "items": [
   {
    "id": "c523b5468a3f",
    "at": "2026-11-28T12:00:00+08:00",
-   "status": "scheduled",
+   "status": "publishing",
    "title": "SEO-004 Google 發布 Google-Agent 爬蟲指南：怎麼辨認真的 AI 代理人、別被防火牆擋掉",
-   "kind": "material"
+   "kind": "material",
+   "prev_status": "scheduled",
+   "dispatched_at": "2026-11-28T12:00:04+08:00"
   },
   {
    "id": "2026-11-28-c8586678d91c",
@@ -44,5 +46,5 @@
    "kind": "material"
   }
  ],
- "updated_at": "2026-11-28T10:30:50+08:00"
+ "updated_at": "2026-11-28T12:00:04+08:00"
 }
