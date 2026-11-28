@@ -3,7 +3,8 @@
  "done": {
   "fb_post": "617157538156667_122210485730905988",
   "fb_comment": "122210485730905988_4768756646742595",
-  "threads": "18114763502213547"
+  "threads": "18114763502213547",
+  "threads_reply": "18091418015686599"
  },
  "errors": {},
  "links": {
@@ -11,5 +12,5 @@
   "threads": "https://www.threads.com/@de.marketing_archive/post/DgRL6K6EcUL"
  },
  "scheduled_at": "2026-11-28T10:30:00+08:00",
- "updated_at": "2026-11-28T10:30:35+08:00"
+ "updated_at": "2026-11-28T10:30:45+08:00"
 }
