@@ -1,5 +1,5 @@
 {
- "rev": 52,
+ "rev": 53,
  "items": [
   {
    "id": "2026-11-28-8bbc4a83e6a5",
@@ -30,6 +30,13 @@
    "kind": "flash"
   },
   {
+   "id": "2026-11-28-e7aea62b85f5",
+   "at": "2026-11-28T20:05:00+08:00",
+   "status": "scheduled",
+   "title": "速報 DIGITAL-003 Google 購物廣告也能開「促銷模式」",
+   "kind": "flash"
+  },
+  {
    "id": "ca4a0d0788ba",
    "at": "2026-11-29T20:00:00+08:00",
    "status": "scheduled",
@@ -44,5 +51,5 @@
    "kind": "material"
   }
  ],
- "updated_at": "2026-11-28T10:18:42+08:00"
+ "updated_at": "2026-11-28T10:26:44+08:00"
 }
