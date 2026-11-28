@@ -1,12 +1,14 @@
 {
- "rev": 53,
+ "rev": 54,
  "items": [
   {
    "id": "2026-11-28-8bbc4a83e6a5",
    "at": "2026-11-28T10:30:00+08:00",
-   "status": "scheduled",
+   "status": "publishing",
    "title": "速報 AI-002 ChatGPT 四歲了，行銷人有變得更好嗎？只會算省了幾小時還不夠",
-   "kind": "flash"
+   "kind": "flash",
+   "prev_status": "scheduled",
+   "dispatched_at": "2026-11-28T10:30:04+08:00"
   },
   {
    "id": "c523b5468a3f",
@@ -51,5 +53,5 @@
    "kind": "material"
   }
  ],
- "updated_at": "2026-11-28T10:26:44+08:00"
+ "updated_at": "2026-11-28T10:30:04+08:00"
 }
